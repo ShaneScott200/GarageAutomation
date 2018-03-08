@@ -21,9 +21,9 @@
   D2 = 4 (OLED)
   D3 = 0 (DHT11)
   D4 = 2
-  D5 = 14
-  D6 = 12
-  D7 = 13
+  D5 = 14 (Door Open)
+  D6 = 12 (DS18B20)
+  D7 = 13 (Door Closed)
 */
 // ============================== WIFI SETUP ===========================
 #include <ESP8266WiFi.h>
@@ -35,6 +35,7 @@ const char* password = "VLgregRy4h";
 const char* mqtt_server = "192.168.0.27";
 // ============================== END WIFI ===========================
 
+
 // ============================= OLED Display Setup ======================
 #include <SPI.h>
 #include <Wire.h>
@@ -45,6 +46,18 @@ Adafruit_SSD1306 display(OLED_RESET);
 // These two values must be specified in the Adafruit_SSD1306-master.h file
 //#define SSD1306_I2C_ADDRESS 0x76
 //#define SSD1306_128_32
+// Screen definitions
+int screen = 0;    
+int screenMax = 4;
+bool screenChanged = true;   // initially we have a new screen,  by definition 
+// defines of the screens to show
+#define GARAGETEMPERATURE 0
+#define HUMIDITY    1
+#define OUTSIDETEMPERATURE    2
+#define DOORSTATUS  3
+#define TIME        4
+long previousLCDMillis = 0;    // for LCD screen update
+long lcdInterval = 4000;
 // ============================== END OLED ===========================
 
 
@@ -84,8 +97,17 @@ int value = 0;
 
 // ============================== GARAGE Setup ======================
 int relayPin = 16;
-
+int openStatusPin = 14;
+bool openStatus = false;
+int closedStatusPin = 13;
+bool closedStatus = false;
 // ============================== END GARAGE ===========================
+
+
+// ============================== TIME Setup ======================
+#include <TimeLib.h>
+
+// ============================== END TIME ===========================
 
 
 
@@ -98,10 +120,7 @@ void setup() {
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x64)
   // Show image buffer on the display hardware.
   // Since the buffer is intialized with an Adafruit splashscreen internally, this will display the splashscreen.
-  display.display();
-  delay(1000);
-  // Clear the buffer.
-  display.clearDisplay();
+  showWelcome();
   // init done
   Serial.println("OLED Display Initialized!");
 
@@ -172,14 +191,41 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1') {
-    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
-    // but actually the LED is on; this is because
-    // it is acive low on the ESP-01)
-  } else {
-    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+  if (strcmp(topic,"garage/openDoor")==0){
+    // whatever you want for this topic
+      // Switch on the LED if an 1 was received as first character
+      if ((char)payload[0] == '1') {
+        showOpenGarageDoor(10);
+        digitalWrite(relayPin, LOW);   // Turn the LED on (Note that LOW is the voltage level
+        // but actually the LED is on; this is because it is acive low on the ESP-01)
+        delay(1000);
+        digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
+      } else {
+        digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
+      }
   }
+
+  if (strcmp(topic,"time")==0){
+    /*int yr, mon, dy, hr, mn, sec;
+    TimeElements tm;
+    tm.Second = 0;
+    tm.Minute = 16;
+    tm.Hour = 19;
+    tm.Wday = 3;
+    tm.Day = 6;
+    tm.Month = 3;
+    tm.Year = 47;
+    time_t t = makeTime(tm);
+    setTime(t);*/
+    //setTime(19,24,30,6,3,47);
+    // whatever you want for this topic
+    //setTime(hr,min,sec,day,month,yr); // Another way to set
+    // format of time string: YYYY-MM-DD-HH-MM-SS
+    for (int i = 0; i < length; i++) {
+      Serial.print((char)payload[i]);
+    }
+  }
+
 
 }
 
@@ -193,7 +239,8 @@ void reconnect() {
       // Once connected, publish an announcement...
       client.publish("outTopic", "hello world");
       // ... and resubscribe
-      client.subscribe("inTopic");
+      client.subscribe("garage/openDoor");
+      client.subscribe("time");
     } else {
       Serial.print("failed, rc=");
       delay(5000);
@@ -213,6 +260,16 @@ void loop() {
   if (now - lastMsg > 2000) {
     lastMsg = now;
 
+    // read door status
+    if (digitalRead(openStatusPin) == HIGH)
+      openStatus = true;
+    else 
+      openStatus = false;
+    if (digitalRead(closedStatusPin) == HIGH)
+      closedStatus = true;
+    else 
+      closedStatus = false;
+      
     // read DS18B20 temperature sensor at index 0 (first sensor)
     sensors.requestTemperatures();  
     DS18B20_temp = sensors.getTempCByIndex(0);
@@ -227,9 +284,6 @@ void loop() {
     {
       Serial.println("Error reading DHT");
     }                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
-    //snprintf (msg_t, 25, "%f", DS18B20_temp);
-    //Serial.print("Publish message: ");
-    //Serial.println(msg);
     dtostrf(t,4,1,msg_t);
     client.publish("garage/temp", msg_t);
     Serial.print(msg_t);
@@ -246,74 +300,160 @@ void loop() {
     client.publish("garage/outsidetemp", msg_ot);
     Serial.println(msg_ot);
 
-    displayState1();
+    displayScreen();
   }
 }
 
 
-// ====================== State 1 (Secondary) Display Method =================
+// ====================== Display Method =================
 // 
 // Method that is called to display the Temperature and Humidity data on the OLED
 // 
 // ===================================================================
-void displayState1(){
+
+void displayScreen() {
+  unsigned long currentLCDMillis = millis();
+  
+  // MUST WE SWITCH SCREEN?
+  if(currentLCDMillis - previousLCDMillis > lcdInterval)              // save the last time you changed the display 
+  {
+    previousLCDMillis = currentLCDMillis; 
+    screen++;
+    if (screen > screenMax) screen = 0;  // all screens done? => start over
+    screenChanged = true; 
+  }
+
+  // debug Serial.println(screen);
+
+
+  // DISPLAY CURRENT SCREEN
+  if (screenChanged)//   -- only update the screen if the screen is changed.
+  {
+    screenChanged = false; // reset for next iteration
+    switch(screen)
+    {
+    case GARAGETEMPERATURE: 
+      showGarageTemperature(40); 
+      break;
+    case HUMIDITY: 
+      showHumidity(50);
+      break;
+    case OUTSIDETEMPERATURE: 
+      showOutsideTemperature(60); 
+      break;
+    case DOORSTATUS:
+      showDoorStatus();
+      break;
+    case TIME:
+      showTime();
+      break;
+    default:
+      // cannot happen -> showError() ?
+      break;
+    }
+  }
+}
+
+void clearDisplay() {
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setTextSize(2);
   display.setCursor(0,0);
+}
 
-  /*display.print("T:");
+void showWelcome()
+{
+  clearDisplay();
+       
+  display.println("Sensor");
+  display.println("Initialising..."); 
+
+  display.display();
+
+  delay(2000);
+}
+
+void showGarageTemperature(int T)
+{
+  clearDisplay();
+       
+  display.println("GARAGE:");
   display.print(t,1); // DHT11 Temperature
-  display.println(" C");
+  display.print((char)248);          
+  display.println("C");
 
-  display.print("H:");
-  display.print(h);
-  display.println(" %");*/
+  display.display();
+}
 
-  display.print("OUT:");
-  //display.print(DS18B20_temp,1);
-  display.print(msg_ot);
-  display.println(" C");
+void showHumidity(int H)
+{
+  clearDisplay();
+       
+  display.println("HUMIDITY:");
+  display.print(h,1);
+  display.println(" %");
+
+  display.display();
+}
+
+void showOutsideTemperature(int T)
+{
+  clearDisplay();
+       
+  display.println("OUTSIDE:");
+  display.print(msg_ot); // DS18B20 Temperature
+  display.print((char)248);          
+  display.println("C");
+
+  display.display();
+}
+
+void showDoorStatus()
+{
+  clearDisplay();
+       
+  display.println("DOOR");
+  if (openStatus == true)
+    display.println("OPEN");
+  else if (closedStatus == true)
+    display.println("CLOSED");
+  else
+    display.println("IN TRANSIT");
 
   display.display();
 }
 
 
-void printDouble( double val, byte precision){
-  // prints val with number of decimal places determine by precision
-  // precision is a number from 0 to 6 indicating the desired decimial places
-  // example: lcdPrintDouble( 3.1415, 2); // prints 3.14 (two decimal places)
-  
-  int intPart;
-  int decPart;
-  char msgBuffer[50];
-  /*if(val < 0.0)
-  {
-   Serial.print('-');
-   val = -val;
-  }*/
-  
-  //Serial.print (int(val));  //prints the int part
-  intPart = int(val);
-  
-  if( precision > 0) {
-   Serial.print("."); // print the decimal point
-   unsigned long frac;
-   unsigned long mult = 1;
-   byte padding = precision -1;
-   while(precision--)
-  mult *=10;
-  
-   if(val >= 0)
-  frac = (val - int(val)) * mult;
-   else
-  frac = (int(val)- val ) * mult;
-   unsigned long frac1 = frac;
-   while( frac1 /= 10 )
-  padding--;
-   while(  padding--)
-  Serial.print("0");
-   Serial.print(frac,DEC) ;
-  }
-  snprintf (msgBuffer, 25, "%d.%d", intPart, decPart);
+void showTime()
+{
+  clearDisplay();
+
+  // digital clock display of the time
+  display.print(year()); 
+  display.print("-");
+  display.print(month());
+  display.print("-");
+  display.println(day());
+
+  display.print(hour());
+  display.print(":");
+  if(minute() < 10)
+    display.print('0');
+  display.print(minute());
+  display.print(":");
+  if(second() < 10)
+    display.print('0');
+  display.print(second());
+
+  display.display();
+}
+
+
+void showOpenGarageDoor(int T)
+{
+  clearDisplay();
+       
+  display.println("OPEN DOOR");
+
+  display.display();
 }
