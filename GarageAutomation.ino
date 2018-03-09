@@ -116,30 +116,53 @@ void setup() {
   Serial.begin(115200);
   
   // --------- setup OLED  --------- 
-  // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
+  setupOLED();
+
+  // --------- setup DS18B20 Temp Sensor --------- 
+  setupTempSensor();
+  
+  // --------- setup Output Relay  --------- 
+  setupGarageSensors();
+
+  // --------- setup Wifi Connection  --------- 
+  setupWifi();
+
+  // --------- setup OLED  --------- 
+  setupMQTT();
+
+
+}
+
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void setupOLED() {
+    // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x64)
   // Show image buffer on the display hardware.
   // Since the buffer is intialized with an Adafruit splashscreen internally, this will display the splashscreen.
   showWelcome();
   // init done
   Serial.println("OLED Display Initialized!");
+}
 
-  // --------- setup Output Relay  --------- 
-  pinMode(relayPin, OUTPUT);
-  digitalWrite(relayPin, HIGH); // Set high to disable
-
-  // --------- setup Wifi Connection  --------- 
-  setup_wifi();
-
-  // --------- setup OLED  --------- 
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
-
-  // --------- setup DS18B20 Temp Sensor --------- 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void setupTempSensor() {
   sensors.begin();
 }
 
-void setup_wifi() {
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void setupWifi() {
 
   delay(10);
   // We start by connecting to a WiFi network
@@ -150,6 +173,7 @@ void setup_wifi() {
   WiFi.mode(WIFI_STA); // <<< Station
   WiFi.begin(ssid, password);
 
+  // Try to connect 10 times with 500 msec inbetween each attempt
   for (int i =0; i < 10; i++)
   {
     if (WiFi.status() != WL_CONNECTED) {
@@ -168,20 +192,35 @@ void setup_wifi() {
     Serial.println(WiFi.localIP());
   }
 
-    if (!connected) {
-    display.clearDisplay();
-    display.setTextColor(WHITE);
-    display.setTextSize(2);
-    display.setCursor(0,0);
-  
-    display.println("Connection");
-    display.println("Error!");
-  
-    display.display();
-  }
-  
 }
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void setupGarageSensors() {
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH); // Set high to disable
+  pinMode(openStatusPin, INPUT);
+  pinMode(closedStatusPin, INPUT);
+}
+
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void setupMQTT() {
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+}
+
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
@@ -229,6 +268,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 }
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
@@ -249,6 +293,11 @@ void reconnect() {
 }
 
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void loop() {
 
   if (!client.connected()) {
@@ -260,6 +309,20 @@ void loop() {
   if (now - lastMsg > 2000) {
     lastMsg = now;
 
+    readDoorSensor();
+
+    readDS18B20Sensor();
+
+    readDHT11Sensor();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+    publishEnvironmentData();
+
+    displayScreen();
+  }
+}
+
+void readDoorSensor() {
+
     // read door status
     if (digitalRead(openStatusPin) == HIGH)
       openStatus = true;
@@ -269,12 +332,16 @@ void loop() {
       closedStatus = true;
     else 
       closedStatus = false;
-      
-    // read DS18B20 temperature sensor at index 0 (first sensor)
+}
+
+void readDS18B20Sensor() {
+        // read DS18B20 temperature sensor at index 0 (first sensor)
     sensors.requestTemperatures();  
     DS18B20_temp = sensors.getTempCByIndex(0);
-    
-    int rtn = dht.read(dhtPin);
+}
+
+void readDHT11Sensor() {
+      int rtn = dht.read(dhtPin);
     if (rtn == DHTLIB_OK)
     {
       t = dht.temperature;
@@ -283,7 +350,10 @@ void loop() {
     else
     {
       Serial.println("Error reading DHT");
-    }                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+    } 
+}
+
+void publishEnvironmentData() {
     dtostrf(t,4,1,msg_t);
     client.publish("garage/temp", msg_t);
     Serial.print(msg_t);
@@ -294,23 +364,17 @@ void loop() {
     Serial.print(msg_h);
     Serial.print("\t");
     
-    //snprintf (msg_ot, 25, "%2.1f", DS18B20_temp);
     //dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
     dtostrf(DS18B20_temp,4,1,msg_ot);
     client.publish("garage/outsidetemp", msg_ot);
     Serial.println(msg_ot);
-
-    displayScreen();
-  }
 }
-
 
 // ====================== Display Method =================
 // 
 // Method that is called to display the Temperature and Humidity data on the OLED
 // 
 // ===================================================================
-
 void displayScreen() {
   unsigned long currentLCDMillis = millis();
   
@@ -322,9 +386,6 @@ void displayScreen() {
     if (screen > screenMax) screen = 0;  // all screens done? => start over
     screenChanged = true; 
   }
-
-  // debug Serial.println(screen);
-
 
   // DISPLAY CURRENT SCREEN
   if (screenChanged)//   -- only update the screen if the screen is changed.
@@ -342,10 +403,10 @@ void displayScreen() {
       showOutsideTemperature(60); 
       break;
     case DOORSTATUS:
-      showDoorStatus();
+      showDoorStatus(70);
       break;
     case TIME:
-      showTime();
+      showTime(80);
       break;
     default:
       // cannot happen -> showError() ?
@@ -354,6 +415,11 @@ void displayScreen() {
   }
 }
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void clearDisplay() {
   display.clearDisplay();
   display.setTextColor(WHITE);
@@ -361,6 +427,11 @@ void clearDisplay() {
   display.setCursor(0,0);
 }
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void showWelcome()
 {
   clearDisplay();
@@ -373,6 +444,11 @@ void showWelcome()
   delay(2000);
 }
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void showGarageTemperature(int T)
 {
   clearDisplay();
@@ -385,6 +461,11 @@ void showGarageTemperature(int T)
   display.display();
 }
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void showHumidity(int H)
 {
   clearDisplay();
@@ -396,6 +477,11 @@ void showHumidity(int H)
   display.display();
 }
 
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void showOutsideTemperature(int T)
 {
   clearDisplay();
@@ -408,7 +494,12 @@ void showOutsideTemperature(int T)
   display.display();
 }
 
-void showDoorStatus()
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void showDoorStatus(int T)
 {
   clearDisplay();
        
@@ -423,8 +514,12 @@ void showDoorStatus()
   display.display();
 }
 
-
-void showTime()
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void showTime(int T)
 {
   clearDisplay();
 
@@ -448,7 +543,11 @@ void showTime()
   display.display();
 }
 
-
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
 void showOpenGarageDoor(int T)
 {
   clearDisplay();
