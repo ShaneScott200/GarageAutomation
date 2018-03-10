@@ -19,11 +19,13 @@
   D0 = 16 (Relay Output)
   D1 = 5 (OLED)
   D2 = 4 (OLED)
-  D3 = 0 (DHT11) now PIR
-  D4 = 2
+  D3 = 0 (PIR)
+  D4 = 2 (NOT USED)
   D5 = 14 (Door Open)
-  D6 = 12 (DS18B20)
+  D6 = 12 (DHT11)
   D7 = 13 (Door Closed)
+  D8 = 15 (DS18B20)
+  A0 = A0 (LDR)
 
   static const uint8_t D0   = 16;
 static const uint8_t D1   = 5;
@@ -48,7 +50,7 @@ const char* mqtt_server = "192.168.0.27";
 // ============================== END WIFI ===========================
 
 
-// ============================= OLED Display Setup ======================
+// ============================= OLED DISPLAY SETUP ======================
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -58,28 +60,31 @@ Adafruit_SSD1306 display(OLED_RESET);
 // These two values must be specified in the Adafruit_SSD1306-master.h file
 //#define SSD1306_I2C_ADDRESS 0x76
 //#define SSD1306_128_32
-// Screen definitions
+// ============================== END OLED ===========================
+
+// ============================= SCREEN SETUP ======================
 int screen = 0;    
-int screenMax = 4;
+int screenMax = 5;
 bool screenChanged = true;   // initially we have a new screen,  by definition 
 // defines of the screens to show
 #define GARAGETEMPERATURE 0
 #define HUMIDITY    1
 #define OUTSIDETEMPERATURE    2
 #define DOORSTATUS  3
-#define TIME        4
+#define LIGHTSTATUS  4
+#define TIME        5
 long previousLCDMillis = 0;    // for LCD screen update
 long lcdInterval = 4000;
-// ============================== END OLED ===========================
+// ============================== END SCREEN SETUP ===========================
 
 
 // ============================== DHT11 ============================== 
-#include <dht11.h>
-#define DHTTYPE  DHT11
-dht11 dht;
-int dhtPin=0;
-int t = 0;
-int h = 0;
+#include <DHT.h>
+#define DHTTYPE  DHT21
+int dhtPin=12;
+DHT dht(dhtPin, DHTTYPE);
+float t = 0;
+float h = 0;
 // ============================== END DHT11 ===========================
 
 
@@ -87,7 +92,7 @@ int h = 0;
 #include <OneWire.h>
 #include <DallasTemperature.h>
 // Data wire is plugged into pin D6 on the Arduino
-#define ONE_WIRE_BUS 12
+#define ONE_WIRE_BUS 15
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
@@ -135,6 +140,9 @@ void setup() {
 
   // --------- setup DS18B20 Temp Sensor --------- 
   setupTempSensor();
+
+  // --------- setup DHT  --------- 
+  setupDHT();
   
   // --------- setup Output Relay  --------- 
   setupGarageSensors();
@@ -170,6 +178,15 @@ void setupOLED() {
 // ====================================================================
 void setupTempSensor() {
   sensors.begin();
+}
+
+// ============================ SETUP DHT SENSOR =====================
+//
+// Description:
+//
+// ====================================================================
+void setupDHT() {
+  dht.begin();
 }
 
 // ============================ SETUP WIFI ============================
@@ -386,16 +403,13 @@ void readDS18B20Sensor() {
 //
 // ====================================================================
 void readDHT11Sensor() {
-      int rtn = dht.read(dhtPin);
-    if (rtn == DHTLIB_OK)
-    {
-      t = dht.temperature;
-      h = dht.humidity;
+    //int rtn = dht.read(dhtPin);
+    t = dht.readTemperature();
+    h = dht.readHumidity();
+    // Check if any reads failed and exit early (to try again).
+    if (isnan(h) || isnan(t) ) {
+      Serial.println("Failed to read from DHT sensor!");
     }
-    else
-    {
-      Serial.println("Error reading DHT");
-    } 
 }
 
 // ============================ PUBLISH ENVIRONMENTAL DATA =================
@@ -444,19 +458,22 @@ void displayScreen() {
     switch(screen)
     {
     case GARAGETEMPERATURE: 
-      showGarageTemperature(40); 
+      showTemperature(10); 
       break;
     case HUMIDITY: 
-      showHumidity(50);
+      showHumidity(20);
       break;
     case OUTSIDETEMPERATURE: 
-      showOutsideTemperature(60); 
+      showGarageTemperature(30); 
       break;
     case DOORSTATUS:
-      showDoorStatus(70);
+      showDoorStatus(40);
+      break;
+    case LIGHTSTATUS:
+      showLightStatus(50);
       break;
     case TIME:
-      showTime(80);
+      showTime(60);
       break;
     default:
       // cannot happen -> showError() ?
@@ -486,8 +503,8 @@ void showWelcome()
 {
   clearDisplay();
        
-  display.println("Sensor");
-  display.println("Initialising..."); 
+  display.println("SENSOR");
+  display.println("INIT"); 
 
   display.display();
 
@@ -499,11 +516,11 @@ void showWelcome()
 // Description:
 //
 // ====================================================================
-void showGarageTemperature(int T)
+void showTemperature(int T)
 {
   clearDisplay();
        
-  display.println("GARAGE:");
+  display.println("OUTSIDE:");
   display.print(t,1); // DHT11 Temperature
   display.print((char)248);          
   display.println("C");
@@ -532,11 +549,11 @@ void showHumidity(int H)
 // Description:
 //
 // ====================================================================
-void showOutsideTemperature(int T)
+void showGarageTemperature(int T)
 {
   clearDisplay();
        
-  display.println("OUTSIDE:");
+  display.println("GARAGE:");
   display.print(msg_ot); // DS18B20 Temperature
   display.print((char)248);          
   display.println("C");
@@ -573,7 +590,9 @@ void showLightStatus(int T)
 {
   clearDisplay();
        
-  display.println("LIGHT");
+  display.print("LIGHT");
+  display.print(" ");
+  display.println(ldrSensorValue);
   if (lightStatus == true)
     display.println("ON");
   else
