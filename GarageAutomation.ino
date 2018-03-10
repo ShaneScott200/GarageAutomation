@@ -19,11 +19,23 @@
   D0 = 16 (Relay Output)
   D1 = 5 (OLED)
   D2 = 4 (OLED)
-  D3 = 0 (DHT11)
+  D3 = 0 (DHT11) now PIR
   D4 = 2
   D5 = 14 (Door Open)
   D6 = 12 (DS18B20)
   D7 = 13 (Door Closed)
+
+  static const uint8_t D0   = 16;
+static const uint8_t D1   = 5;
+static const uint8_t D2   = 4;
+static const uint8_t D3   = 0;
+static const uint8_t D4   = 2;
+static const uint8_t D5   = 14;
+static const uint8_t D6   = 12;
+static const uint8_t D7   = 13;
+static const uint8_t D8   = 15;
+static const uint8_t D9   = 3;
+static const uint8_t D10  = 1;
 */
 // ============================== WIFI SETUP ===========================
 #include <ESP8266WiFi.h>
@@ -101,6 +113,9 @@ int openStatusPin = 14;
 bool openStatus = false;
 int closedStatusPin = 13;
 bool closedStatus = false;
+int ldrPin = A0;
+int ldrSensorValue = 0;
+bool lightStatus = false;
 // ============================== END GARAGE ===========================
 
 
@@ -148,7 +163,7 @@ void setupOLED() {
   Serial.println("OLED Display Initialized!");
 }
 
-// ============================ SETUP OLED ============================
+// ============================ SETUP TEMP SENSOR =====================
 //
 // Description:
 //
@@ -157,7 +172,7 @@ void setupTempSensor() {
   sensors.begin();
 }
 
-// ============================ SETUP OLED ============================
+// ============================ SETUP WIFI ============================
 //
 // Description:
 //
@@ -194,19 +209,20 @@ void setupWifi() {
 
 }
 
-// ============================ SETUP OLED ============================
+// ========================= SETUP GARAGE SENSOR =======================
 //
 // Description:
 //
-// ====================================================================
+// =====================================================================
 void setupGarageSensors() {
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, HIGH); // Set high to disable
   pinMode(openStatusPin, INPUT);
   pinMode(closedStatusPin, INPUT);
+ 
 }
 
-// ============================ SETUP OLED ============================
+// ============================ SETUP MQTT ============================
 //
 // Description:
 //
@@ -216,7 +232,7 @@ void setupMQTT() {
   client.setCallback(callback);
 }
 
-// ============================ SETUP OLED ============================
+// ============================ MQTT CALLBACK==========================
 //
 // Description:
 //
@@ -268,7 +284,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 }
 
-// ============================ SETUP OLED ============================
+// ============================ RECONNECT MQTT ========================
 //
 // Description:
 //
@@ -293,7 +309,7 @@ void reconnect() {
 }
 
 
-// ============================ SETUP OLED ============================
+// ============================ LOOP ==================================
 //
 // Description:
 //
@@ -311,6 +327,8 @@ void loop() {
 
     readDoorSensor();
 
+    readLDRSensor();
+
     readDS18B20Sensor();
 
     readDHT11Sensor();
@@ -321,6 +339,11 @@ void loop() {
   }
 }
 
+// ============================ READ DOOR SENSORS ====================
+//
+// Description:
+//
+// ====================================================================
 void readDoorSensor() {
 
     // read door status
@@ -333,13 +356,35 @@ void readDoorSensor() {
     else 
       closedStatus = false;
 }
+// ============================ READ LDR SENSOR ======================
+//
+// Description:
+//
+// ====================================================================
+void readLDRSensor() {
+    ldrSensorValue = analogRead(ldrPin);
+    if (ldrSensorValue > 600)
+      lightStatus = true;
+    else
+      lightStatus = false;
+}
 
+// ============================ READ TEMP SENSOR ======================
+//
+// Description:
+//
+// ====================================================================
 void readDS18B20Sensor() {
         // read DS18B20 temperature sensor at index 0 (first sensor)
     sensors.requestTemperatures();  
     DS18B20_temp = sensors.getTempCByIndex(0);
 }
 
+// ============================ READ DHT SENSOR =======================
+//
+// Description:
+//
+// ====================================================================
 void readDHT11Sensor() {
       int rtn = dht.read(dhtPin);
     if (rtn == DHTLIB_OK)
@@ -353,6 +398,11 @@ void readDHT11Sensor() {
     } 
 }
 
+// ============================ PUBLISH ENVIRONMENTAL DATA =================
+//
+// Description:
+//
+// =========================================================================
 void publishEnvironmentData() {
     dtostrf(t,4,1,msg_t);
     client.publish("garage/temp", msg_t);
@@ -510,6 +560,24 @@ void showDoorStatus(int T)
     display.println("CLOSED");
   else
     display.println("IN TRANSIT");
+
+  display.display();
+}
+
+// ============================ SETUP OLED ============================
+//
+// Description:
+//
+// ====================================================================
+void showLightStatus(int T)
+{
+  clearDisplay();
+       
+  display.println("LIGHT");
+  if (lightStatus == true)
+    display.println("ON");
+  else
+    display.println("OFF");
 
   display.display();
 }
