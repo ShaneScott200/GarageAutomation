@@ -14,31 +14,20 @@
   - Open the "Tools -> Board -> Board Manager" and click install for the ESP8266"
   - Select your ESP8266 in "Tools -> Board"
 
-
+  Dx nomenclature is defined within esp8266 core logic.  It can be used here as required
   NODE MCU Pinout
   D0 = 16 (Relay Output)
   D1 = 5 (OLED)
   D2 = 4 (OLED)
   D3 = 0 (PIR)
-  D4 = 2 (NOT USED)
+  D4 = 2 (DS18B20)
   D5 = 14 (Door Open)
   D6 = 12 (DHT11)
   D7 = 13 (Door Closed)
-  D8 = 15 (DS18B20)
+  D8 = 15 (NOT USED) - must not be used with pullup resistor or logic will not download
   A0 = A0 (LDR)
-
-  static const uint8_t D0   = 16;
-static const uint8_t D1   = 5;
-static const uint8_t D2   = 4;
-static const uint8_t D3   = 0;
-static const uint8_t D4   = 2;
-static const uint8_t D5   = 14;
-static const uint8_t D6   = 12;
-static const uint8_t D7   = 13;
-static const uint8_t D8   = 15;
-static const uint8_t D9   = 3;
-static const uint8_t D10  = 1;
 */
+
 // ============================== WIFI SETUP ===========================
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -67,21 +56,21 @@ int screen = 0;
 int screenMax = 5;
 bool screenChanged = true;   // initially we have a new screen,  by definition 
 // defines of the screens to show
-#define GARAGETEMPERATURE 0
-#define HUMIDITY    1
+#define GARAGETEMPERATURE     0
+#define HUMIDITY              1
 #define OUTSIDETEMPERATURE    2
-#define DOORSTATUS  3
-#define LIGHTSTATUS  4
-#define TIME        5
+#define DOORSTATUS            3
+#define LIGHTSTATUS           4
+#define TIME                  5
 long previousLCDMillis = 0;    // for LCD screen update
-long lcdInterval = 4000;
+long lcdInterval = 2000;
 // ============================== END SCREEN SETUP ===========================
 
 
 // ============================== DHT11 ============================== 
 #include <DHT.h>
 #define DHTTYPE  DHT21
-int dhtPin=12;
+int dhtPin=D6;
 DHT dht(dhtPin, DHTTYPE);
 float t = 0;
 float h = 0;
@@ -91,8 +80,8 @@ float h = 0;
 // ============================== DS18B20 Setup ======================
 #include <OneWire.h>
 #include <DallasTemperature.h>
-// Data wire is plugged into pin D6 on the Arduino
-#define ONE_WIRE_BUS 15
+// Data wire is plugged into pin D8 on the Arduino
+#define ONE_WIRE_BUS D4
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
@@ -113,14 +102,19 @@ int value = 0;
 
 
 // ============================== GARAGE Setup ======================
-int relayPin = 16;
-int openStatusPin = 14;
+int relayPin = D0;
+
+int openStatusPin = D5;
+int closedStatusPin = D7;
 bool openStatus = false;
-int closedStatusPin = 13;
 bool closedStatus = false;
+
 int ldrPin = A0;
 int ldrSensorValue = 0;
 bool lightStatus = false;
+
+int pirPin = D3;
+bool pirMotionDetected = false;
 // ============================== END GARAGE ===========================
 
 
@@ -143,6 +137,9 @@ void setup() {
 
   // --------- setup DHT  --------- 
   setupDHT();
+
+  // --------- setup PIR  --------- 
+  setupPIRSensor();
   
   // --------- setup Output Relay  --------- 
   setupGarageSensors();
@@ -187,6 +184,15 @@ void setupTempSensor() {
 // ====================================================================
 void setupDHT() {
   dht.begin();
+}
+
+// ============================ SETUP PIR SENSOR =====================
+//
+// Description:
+//
+// ====================================================================
+void setupPIRSensor() {
+  pinMode(pirPin, INPUT);
 }
 
 // ============================ SETUP WIFI ============================
@@ -346,6 +352,8 @@ void loop() {
 
     readLDRSensor();
 
+    readPIRSensor();
+
     readDS18B20Sensor();
 
     readDHT11Sensor();
@@ -373,6 +381,7 @@ void readDoorSensor() {
     else 
       closedStatus = false;
 }
+
 // ============================ READ LDR SENSOR ======================
 //
 // Description:
@@ -384,6 +393,19 @@ void readLDRSensor() {
       lightStatus = true;
     else
       lightStatus = false;
+    Serial.print(ldrSensorValue);
+    Serial.print("\t");
+}
+
+// ============================ READ PIR SENSOR ======================
+//
+// Description:
+//
+// ====================================================================
+void readPIRSensor() {
+    pirMotionDetected = digitalRead(pirPin);
+    Serial.print(pirMotionDetected);
+    Serial.print("\t");
 }
 
 // ============================ READ TEMP SENSOR ======================
