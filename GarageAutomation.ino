@@ -722,7 +722,7 @@ time_t getNtpTime()
   Serial.println(ntpServerIP);
   sendNTPpacket(ntpServerIP);
   uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
+  while (millis() - beginWait < 500) {    // was 1500
     int size = Udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
       Serial.println("Receive NTP Response");
@@ -733,7 +733,12 @@ time_t getNtpTime()
       secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
       secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
       secsSince1900 |= (unsigned long)packetBuffer[43];
-      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+      int currentTimeZone = timeZone;
+      time_t currentTime = secsSince1900 - 2208988800UL + currentTimeZone * SECS_PER_HOUR;
+      digitalClockDisplay();  // for troubleshooting
+      if (IsDST(currentTime))
+        currentTimeZone++;
+      return secsSince1900 - 2208988800UL + currentTimeZone * SECS_PER_HOUR;
     }
   }
   Serial.println("No NTP Response :-(");
@@ -763,4 +768,50 @@ void sendNTPpacket(IPAddress &address)
   Udp.endPacket();
 }
 
+boolean IsDST(time_t t)
+{
+  boolean _isDST;
+  tmElements_t te;
+  te.Year = year(t)-1970;
+  te.Month =3;
+  te.Day =1;
+  te.Hour = 0;
+  te.Minute = 0;
+  te.Second = 0;
+  time_t dstStart,dstEnd, current;
+  dstStart = makeTime(te);
+  dstStart = nextSunday(dstStart);
+  dstStart = nextSunday(dstStart); //second sunday in march
+  dstStart += 2*SECS_PER_HOUR;//2AM
+  te.Month=11;
+  dstEnd = makeTime(te);
+  dstEnd = nextSunday(dstEnd); //first sunday in november
+  dstEnd += SECS_PER_HOUR; //1AM
+  _isDST = t>=dstStart && t<dstEnd;
+  if (_isDST)
+    Serial.println("Is Daylight Saving Time");
+  else
+    Serial.println("Not Daylight Saving Time");
+  return (_isDST);
+}
 
+void digitalClockDisplay() {
+ // digital clock display of the time
+ Serial.print(hour());
+ printDigits(minute());
+ printDigits(second());
+ Serial.print(" ");
+ Serial.print(day());
+ Serial.print(" ");
+ Serial.print(month());
+ Serial.print(" ");
+ Serial.print(year());
+ Serial.println();
+}
+void printDigits(int digits) {
+ // utility function for digital clock display: prints preceding colon and leading 0
+ Serial.print(":");
+ if (digits < 10)
+ Serial.print('0');
+ Serial.print(digits);
+}
