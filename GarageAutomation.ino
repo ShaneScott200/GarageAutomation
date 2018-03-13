@@ -39,6 +39,10 @@ const char* mqtt_server = "192.168.0.27";
 // ============================== END WIFI ===========================
 
 
+// ============================== OTA SETUP ===========================
+#include <ArduinoOTA.h>
+// ============================== END OTA ===========================
+
 // ============================= OLED DISPLAY SETUP ======================
 #include <SPI.h>
 #include <Wire.h>
@@ -163,12 +167,14 @@ void setup() {
   // --------- setup Wifi Connection  --------- 
   setupWifi();
 
-  // --------- setup OLED  --------- 
+  // --------- setup MQTT  --------- 
   setupMQTT();
 
   // --------- setup NTP  --------- 
   setupNTP();
 
+  // --------- setup OTA  --------- 
+  //setupOTA();
 }
 
 // ============================ SETUP OLED ============================
@@ -287,6 +293,42 @@ void setupNTP() {
   setSyncInterval(300);
 }
 
+
+// ============================ SETUP OTA ============================
+//
+// Description:
+//
+// ====================================================================
+void setupOTA() {
+  // Port defaults to 8266
+  // ArduinoOTA.setPort(8266);
+
+  // Hostname defaults to esp8266-[ChipID]
+  // ArduinoOTA.setHostname("myesp8266");
+
+  // No authentication by default
+  // ArduinoOTA.setPassword((const char *)"123");
+
+  ArduinoOTA.onStart([]() {
+    Serial.println("Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+}
+
 // ============================ MQTT CALLBACK==========================
 //
 // Description:
@@ -375,6 +417,8 @@ void loop() {
     reconnect();
   }
   client.loop();
+
+  ArduinoOTA.handle();
 
   if (timeStatus() != timeNotSet) {
     if (now() != prevDisplay) { //update the display only if time has changed
@@ -542,11 +586,12 @@ void displayScreen() {
   }
 }
 
-// ============================ SETUP OLED ============================
+
+// ============================ CLEAR DISPLAY ===============================
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void clearDisplay() {
   display.clearDisplay();
   display.setTextColor(WHITE);
@@ -554,11 +599,12 @@ void clearDisplay() {
   display.setCursor(0,0);
 }
 
-// ============================ SETUP OLED ============================
+
+// ============================ SHOW WELCOME DISPLAY =======================
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showWelcome()
 {
   clearDisplay();
@@ -571,11 +617,12 @@ void showWelcome()
   delay(2000);
 }
 
-// ============================ SETUP OLED ============================
+
+// ============================ SHOW OUTSIDE TEMPERATURE DISPLAY ============
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showTemperature(int T)
 {
   clearDisplay();
@@ -588,11 +635,12 @@ void showTemperature(int T)
   display.display();
 }
 
-// ============================ SETUP OLED ============================
+
+// ============================ SHOW OUTSIDE HUMIDITY DISPLAY ================
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showHumidity(int H)
 {
   clearDisplay();
@@ -604,11 +652,12 @@ void showHumidity(int H)
   display.display();
 }
 
-// ============================ SETUP OLED ============================
+
+// ============================ SHOW GARAGE TEMPERATURE DISPLAY ==============
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showGarageTemperature(int T)
 {
   clearDisplay();
@@ -621,11 +670,12 @@ void showGarageTemperature(int T)
   display.display();
 }
 
-// ============================ SETUP OLED ============================
+
+// ============================ SHOW GARAGE DOOR STATUSDISPLAY ===============
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showDoorStatus(int T)
 {
   clearDisplay();
@@ -641,11 +691,12 @@ void showDoorStatus(int T)
   display.display();
 }
 
-// ============================ SETUP OLED ============================
+
+// ============================ SHOW LIGHT STATUS DISPLAY ===================
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showLightStatus(int T)
 {
   clearDisplay();
@@ -661,11 +712,11 @@ void showLightStatus(int T)
   display.display();
 }
 
-// ============================ SETUP OLED ============================
+// ============================ SHOW TIME DISPLAY ===========================
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showTime(int T)
 {
   clearDisplay();
@@ -690,11 +741,11 @@ void showTime(int T)
   display.display();
 }
 
-// ============================ SETUP OLED ============================
+// ============================ SHOW OPEN GARAGE DOOR DISPLAY ================
 //
 // Description:
 //
-// ====================================================================
+// ===========================================================================
 void showOpenGarageDoor(int T)
 {
   clearDisplay();
@@ -704,7 +755,11 @@ void showOpenGarageDoor(int T)
   display.display();
 }
 
-/*-------- NTP code ----------*/
+// ============================ GET NTP TIME ============================
+//
+// Description:
+//
+// ====================================================================
 
 const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
@@ -735,9 +790,13 @@ time_t getNtpTime()
       secsSince1900 |= (unsigned long)packetBuffer[43];
       int currentTimeZone = timeZone;
       time_t currentTime = secsSince1900 - 2208988800UL + currentTimeZone * SECS_PER_HOUR;
-      digitalClockDisplay();  // for troubleshooting
-      if (IsDST(currentTime))
+      if (isDST(currentTime))
+      {
         currentTimeZone++;
+        Serial.println ("DST Active");
+      } else {
+        Serial.println("DST Not Active");
+      }
       return secsSince1900 - 2208988800UL + currentTimeZone * SECS_PER_HOUR;
     }
   }
@@ -745,6 +804,12 @@ time_t getNtpTime()
   return 0; // return 0 if unable to get the time
 }
 
+
+// ============================ SEND NTP REQUEST FOR TIME ====================
+//
+// Description:
+//
+// ===========================================================================
 // send an NTP request to the time server at the given address
 void sendNTPpacket(IPAddress &address)
 {
@@ -768,50 +833,3 @@ void sendNTPpacket(IPAddress &address)
   Udp.endPacket();
 }
 
-boolean IsDST(time_t t)
-{
-  boolean _isDST;
-  tmElements_t te;
-  te.Year = year(t)-1970;
-  te.Month =3;
-  te.Day =1;
-  te.Hour = 0;
-  te.Minute = 0;
-  te.Second = 0;
-  time_t dstStart,dstEnd, current;
-  dstStart = makeTime(te);
-  dstStart = nextSunday(dstStart);
-  dstStart = nextSunday(dstStart); //second sunday in march
-  dstStart += 2*SECS_PER_HOUR;//2AM
-  te.Month=11;
-  dstEnd = makeTime(te);
-  dstEnd = nextSunday(dstEnd); //first sunday in november
-  dstEnd += SECS_PER_HOUR; //1AM
-  _isDST = t>=dstStart && t<dstEnd;
-  if (_isDST)
-    Serial.println("Is Daylight Saving Time");
-  else
-    Serial.println("Not Daylight Saving Time");
-  return (_isDST);
-}
-
-void digitalClockDisplay() {
- // digital clock display of the time
- Serial.print(hour());
- printDigits(minute());
- printDigits(second());
- Serial.print(" ");
- Serial.print(day());
- Serial.print(" ");
- Serial.print(month());
- Serial.print(" ");
- Serial.print(year());
- Serial.println();
-}
-void printDigits(int digits) {
- // utility function for digital clock display: prints preceding colon and leading 0
- Serial.print(":");
- if (digits < 10)
- Serial.print('0');
- Serial.print(digits);
-}
