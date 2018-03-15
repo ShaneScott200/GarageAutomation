@@ -35,7 +35,7 @@ bool connected = false;
 // Update these with values suitable for your network.
 const char* ssid = "RedBear";
 const char* password = "VLgregRy4h";
-const char* mqtt_server = "192.168.0.27";
+const char* mqtt_server = "192.168.0.32";
 // ============================== END WIFI ===========================
 
 
@@ -475,6 +475,10 @@ void readLDRSensor() {
       lightStatus = true;
     else
       lightStatus = false;
+
+    char msg_light[50];
+    dtostrf(ldrSensorValue,4,1,msg_light);
+    client.publish("garage/lightlevel", msg_light);
     Serial.print(ldrSensorValue);
     Serial.print("\t");
 }
@@ -486,7 +490,10 @@ void readLDRSensor() {
 // ====================================================================
 void readPIRSensor() {
     pirMotionDetected = digitalRead(pirPin);
-    Serial.print(pirMotionDetected);
+    char msg_motion[50];
+    dtostrf(pirMotionDetected,4,1,msg_motion);
+    client.publish("garage/motionactive", msg_motion);
+    Serial.print(msg_motion);
     Serial.print("\t");
 }
 
@@ -523,18 +530,18 @@ void readDHT11Sensor() {
 // =========================================================================
 void publishEnvironmentData() {
     dtostrf(t,4,1,msg_t);
-    client.publish("garage/temp", msg_t);
+    client.publish("garage/outsidetemp", msg_t);
     Serial.print(msg_t);
     Serial.print("\t");
     
     dtostrf(h,4,1,msg_h);
-    client.publish("garage/humidity", msg_h);
+    client.publish("garage/outsidehumidity", msg_h);
     Serial.print(msg_h);
     Serial.print("\t");
     
     //dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
     dtostrf(DS18B20_temp,4,1,msg_ot);
-    client.publish("garage/outsidetemp", msg_ot);
+    client.publish("garage/garagetemp", msg_ot);
     Serial.println(msg_ot);
 }
 
