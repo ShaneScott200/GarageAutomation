@@ -141,6 +141,7 @@ void digitalClockDisplay();
 void printDigits(int digits);
 void sendNTPpacket(IPAddress &address);
 time_t prevDisplay = 0; // when the digital clock was displayed
+
 // ============================== END TIME ===========================
 
 
@@ -356,29 +357,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
         digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
       }
   }
-
-  if (strcmp(topic,"time")==0){
-    /*int yr, mon, dy, hr, mn, sec;
-    TimeElements tm;
-    tm.Second = 0;
-    tm.Minute = 16;
-    tm.Hour = 19;
-    tm.Wday = 3;
-    tm.Day = 6;
-    tm.Month = 3;
-    tm.Year = 47;
-    time_t t = makeTime(tm);
-    setTime(t);*/
-    //setTime(19,24,30,6,3,47);
-    // whatever you want for this topic
-    //setTime(hr,min,sec,day,month,yr); // Another way to set
-    // format of time string: YYYY-MM-DD-HH-MM-SS
-    for (int i = 0; i < length; i++) {
-      Serial.print((char)payload[i]);
-    }
-  }
-
-
 }
 
 // ============================ RECONNECT MQTT ========================
@@ -804,6 +782,12 @@ time_t getNtpTime()
       } else {
         Serial.println("DST Not Active");
       }
+
+      if(isDaytime(true))
+        Serial.println("Daytime");
+      else
+        Serial.println("Nighttime");
+
       return secsSince1900 - 2208988800UL + currentTimeZone * SECS_PER_HOUR;
     }
   }
@@ -811,6 +795,15 @@ time_t getNtpTime()
   return 0; // return 0 if unable to get the time
 }
 
+bool isDaytime(bool isDST) {
+    int dayOfYear = int((month()-1) * 30.5) + day();
+  
+    int sunrise = (392 + 117*cos((dayOfYear+8)/58.09))-60*isDST;
+    int sunset = (1144 - 170*cos((dayOfYear+8)/58.09))-60*isDST;
+    int actualTime = hour()*60+minute();
+    return (actualTime > sunrise && actualTime < sunset);
+
+}
 
 // ============================ SEND NTP REQUEST FOR TIME ====================
 //
