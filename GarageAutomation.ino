@@ -434,14 +434,21 @@ void loop() {
 void readDoorSensor() {
 
     // read door status
-    if (digitalRead(openStatusPin) == HIGH)
+    if (digitalRead(openStatusPin) == HIGH) {
       openStatus = true;
-    else 
+      client.publish("garage/openStatus", "TRUE");
+    } else {
       openStatus = false;
-    if (digitalRead(closedStatusPin) == HIGH)
+      client.publish("garage/openStatus", "FALSE");
+    }
+    
+    if (digitalRead(closedStatusPin) == HIGH) {
       closedStatus = true;
-    else 
+      client.publish("garage/closedStatus", "TRUE");
+    } else {
       closedStatus = false;
+      client.publish("garage/closedStatus", "FALSE");
+    }
 }
 
 // ============================ READ LDR SENSOR ======================
@@ -658,7 +665,7 @@ void showGarageTemperature(int T)
 }
 
 
-// ============================ SHOW GARAGE DOOR STATUSDISPLAY ===============
+// ============================ SHOW GARAGE DOOR STATUS DISPLAY ===============
 //
 // Description:
 //
@@ -785,7 +792,7 @@ time_t getNtpTime()
         Serial.println("DST Not Active");
       }
 
-      if(isDaytime(true))
+      if(isDaytime())
         Serial.println("Daytime");
       else
         Serial.println("Nighttime");
@@ -795,16 +802,6 @@ time_t getNtpTime()
   }
   Serial.println("No NTP Response :-(");
   return 0; // return 0 if unable to get the time
-}
-
-bool isDaytime(bool isDST) {
-    int dayOfYear = int((month()-1) * 30.5) + day();
-  
-    int sunrise = (392 + 117*cos((dayOfYear+8)/58.09))-60*isDST;
-    int sunset = (1144 - 170*cos((dayOfYear+8)/58.09))-60*isDST;
-    int actualTime = hour()*60+minute();
-    return (actualTime > sunrise && actualTime < sunset);
-
 }
 
 // ============================ SEND NTP REQUEST FOR TIME ====================
@@ -843,7 +840,6 @@ void sendNTPpacket(IPAddress &address)
 // ======================================================================
 void CheckGarageDoorStatus() {
   if (closedStatus) {    // Door is closed, nothing else to do
-    Serial.println("Door is closed!");
     doorOpenTime = millis();
     return;
   }
