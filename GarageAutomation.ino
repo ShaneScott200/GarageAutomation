@@ -35,7 +35,6 @@ bool connected = false;
 // Update these with values suitable for your network.
 const char* ssid = "RedBear";
 const char* password = "VLgregRy4h";
-const char* mqtt_server = "192.168.0.32";
 // ============================== END WIFI ===========================
 
 
@@ -98,6 +97,7 @@ double DS18B20_temp = 0;
 #include<stdlib.h>
 WiFiClient espClient;
 PubSubClient client(espClient);
+const char* mqtt_server = "192.168.0.101";
 long lastMsg = 0;
 char msg_t[50];
 char msg_h[50];
@@ -113,6 +113,8 @@ int openStatusPin = D5;
 int closedStatusPin = D7;
 bool openStatus = false;
 bool closedStatus = false;
+long doorOpenTime = 0;
+int garageDoorOpenTimeLimit = 15*60*1000;
 
 int ldrPin = A0;
 int ldrSensorValue = 0;
@@ -348,11 +350,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     // whatever you want for this topic
       // Switch on the LED if an 1 was received as first character
       if ((char)payload[0] == '1') {
-        showOpenGarageDoor(10);
-        digitalWrite(relayPin, LOW);   // Turn the LED on (Note that LOW is the voltage level
-        // but actually the LED is on; this is because it is acive low on the ESP-01)
-        delay(1000);
-        digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
+        closeGarageDoor();
       } else {
         digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
       }
@@ -405,7 +403,7 @@ void loop() {
   }
   
   long now = millis();
-  if (now - lastMsg > 2000) {
+  if (now - lastMsg > 1000) {
     lastMsg = now;
 
     readDoorSensor();
@@ -420,8 +418,12 @@ void loop() {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
     publishEnvironmentData();
 
+    CheckGarageDoorStatus();
+
     displayScreen();
   }
+
+  
 }
 
 // ============================ READ DOOR SENSORS ====================
@@ -726,16 +728,17 @@ void showTime(int T)
   display.display();
 }
 
-// ============================ SHOW OPEN GARAGE DOOR DISPLAY ================
+// ============================ SHOW OPEN / CLOSE GARAGE DOOR DISPLAY ================
 //
 // Description:
 //
 // ===========================================================================
-void showOpenGarageDoor(int T)
+void showOpenCloseGarageDoor(int T)
 {
   clearDisplay();
        
-  display.println("OPEN DOOR");
+  display.println("OPEN/CLOSE");
+  display.println("DOOR");
 
   display.display();
 }
@@ -744,8 +747,7 @@ void showOpenGarageDoor(int T)
 //
 // Description:
 //
-// ====================================================================
-
+// ======================================================================
 const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
 byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
 
@@ -808,9 +810,9 @@ bool isDaytime(bool isDST) {
 // ============================ SEND NTP REQUEST FOR TIME ====================
 //
 // Description:
+// send an NTP request to the time server at the given address
 //
 // ===========================================================================
-// send an NTP request to the time server at the given address
 void sendNTPpacket(IPAddress &address)
 {
   // set all bytes in the buffer to 0
@@ -831,5 +833,45 @@ void sendNTPpacket(IPAddress &address)
   Udp.beginPacket(address, 123); //NTP requests are to port 123
   Udp.write(packetBuffer, NTP_PACKET_SIZE);
   Udp.endPacket();
+}
+
+
+// ============================ CHECK GARAGE DOOR STATUS ===============
+//
+// Description:
+//
+// ======================================================================
+void CheckGarageDoorStatus() {
+  if (closedStatus) {    // Door is closed, nothing else to do
+    Serial.println("Door is closed!");
+    doorOpenTime = millis();
+    return;
+  }
+
+  if (pirMotionDetected) {
+      Serial.println("Motion Detected!  Reset timer!");
+      doorOpenTime = millis();
+      return;
+    }
+  long garageDoorTimeElapsed = millis() - doorOpenTime;
+  Serial.print("Garage Door Time Elapsed: "); Serial.println(garageDoorTimeElapsed);
+  if (garageDoorTimeElapsed > garageDoorOpenTimeLimit) {    // 15 minutes
+    closeGarageDoor();
+    doorOpenTime = millis();
+  }
+}
+
+// ============================ OPEN/CLOSE GARAGE DOOR ==================
+//
+// Description:
+//
+// ======================================================================
+void closeGarageDoor() {
+  showOpenCloseGarageDoor(15);
+  digitalWrite(relayPin, LOW);   // Turn the LED on (Note that LOW is the voltage level
+  // but actually the LED is on; this is because it is acive low on the ESP-01)
+  delay(1000);
+  digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
+  Serial.println("Send Open/Close Garage Door Command!"); 
 }
 
