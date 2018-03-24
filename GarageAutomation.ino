@@ -303,6 +303,7 @@ void setupMQTT() {
 //
 // ====================================================================
 void setupNTP() {
+  
   Udp.begin(localPort);
   Serial.print("Local port: ");
   Serial.println(Udp.localPort());
@@ -374,7 +375,34 @@ void callback(char* topic, byte* payload, unsigned int length) {
         digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
       }
   }
+
+  if (strcmp(topic,"time")==0){
+      // Switch on the relay if a 1 was received as first character
+      // parse time string from 'payload'  format is: "yyyy-mm-dd-hr-min-sec"
+      int timeValues[] = {2018,3,23,12,05,0};         // Initialize time array with a default time.  If there is an error the value will be 0.
+      char instring[length];                          // create the array to hold the payload converted to char (required for strtok)
+      for (int i = 0; i<length; i++) {                // convert the payload to char array
+        instring[i] = (char)payload[i];
+      }
+      char delimiters[] = "-";                        // Could also add ‘:’ for time
+      const  int MAXVALUES = 6;
+      char* valPosition;
+     
+      //This initializes strtok with our string to tokenize
+      valPosition = strtok(instring, delimiters);       // Get the first item from the payload
+      for (int i  = 0; i < MAXVALUES; i++){             // Populate the array with the remaining values in the payload
+        timeValues[i] = atoi(valPosition);              // convert value to int and store time values in array.
+        //Here we pass in a NULL value, which tells strtok to continue working with the previous string
+        valPosition = strtok(NULL, delimiters);
+      }
+      
+     // set the time
+     setTime(timeValues[3],timeValues[4],timeValues[5],timeValues[2],timeValues[1],timeValues[0]);
+     Serial.println("Time set");
+    }
 }
+
+
 
 // ============================ RECONNECT MQTT ========================
 //
@@ -905,7 +933,8 @@ void setup() {
 
   // --------- setup NTP  --------- 
   //setupNTP();   // NTP must be setup after Wifi or NodeMCU will crash!
-
+ 
+  
   // --------- setup OTA  --------- 
   //setupOTA();
 
