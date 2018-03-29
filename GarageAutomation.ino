@@ -17,9 +17,9 @@
   Dx nomenclature is defined within esp8266 core logic.  It can be used here as required
   NODE MCU Pinout
   D0 = 16 (Relay Output)
-  D1 = 5 (OLED)
-  D2 = 4 (OLED)
-  D3 = 0 (PIR)
+  D1 = 5 (OLED - SCL)
+  D2 = 4 (OLED - SDA)
+  D3 = 0 (PIR)     -  Can't use this pin.  It is used to reset the NodeMCU during program download
   D4 = 2 (DS18B20)
   D5 = 14 (Door Open)
   D6 = 12 (DHT11)
@@ -28,21 +28,22 @@
   A0 = A0 (LDR)
 */
 
-// ============================== WIFI SETUP ===========================
+// ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 // Update these with values suitable for your network.
 const char* ssid = "RedBear";
 const char* password = "VLgregRy4h";
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Try to replace with DS18B20 MAC
-// ============================== END WIFI ===========================
+// ============================== END WIFI CONFIGURATION =========================
 
 
-// ============================== OTA SETUP ===========================
+// ============================== OTA CONFIGURATION ===========================
 #include <ArduinoOTA.h>
-// ============================== END OTA ===========================
+// ============================== END OTA CONFIGURATION =======================
 
-// ============================= OLED DISPLAY SETUP ======================
+
+// ============================= OLED DISPLAY CONFIGURATION ======================
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -51,10 +52,10 @@ byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Try to replace with DS18
 Adafruit_SSD1306 display(OLED_RESET);
 // This value must be specified in the Adafruit_SSD1306-master.h file
 //#define SSD1306_128_32
-// ============================== END OLED ===========================
+// ============================== END OLED CONFIGURATION ======================
 
 
-// ============================= SCREEN SETUP ======================
+// ============================= SCREEN CONFIGURATION ======================
 int screen = 0;    
 int screenMax = 5;
 bool screenChanged = true;   // initially we have a new screen,  by definition 
@@ -67,49 +68,44 @@ bool screenChanged = true;   // initially we have a new screen,  by definition
 #define TIME                  5
 long previousLCDMillis = 0;    // for LCD screen update
 long lcdInterval = 2000;
-// ============================== END SCREEN SETUP ===========================
+// ============================== END SCREEN CONFIGURATION ===========================
 
 
-// ============================== DHT11 ============================== 
+// ============================== DHT11 CONFIGURATION ============================== 
 #include <DHT.h>
 #define DHTTYPE  DHT21
 int dhtPin=D6;
 DHT dht(dhtPin, DHTTYPE);
 float t = 0;
 float h = 0;
-// ============================== END DHT11 ===========================
+int failedCount = 0;
+int failedCountLimit = 10;
+// ============================== END DHT11 CONFIGURATION ===========================
 
 
-// ============================== DS18B20 Setup ======================
+// ============================== DS18B20 CONFIGURATION ======================
 #include <OneWire.h>
 #include <DallasTemperature.h>
 // Data wire is plugged into pin D4 on the Arduino
-#define ONE_WIRE_BUS D4
+#define ONE_WIRE_BUS D3
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 double DS18B20_temp = 0;
-// ============================== END DS18B20 ======================
+// ============================== END DS18B20 CONFIGURATION ======================
 
-// ============================== MQTT Setup =======================
+// ============================== MQTT CONFIGURATION =======================
 //#include<stdlib.h>
 WiFiClient espClient;
 PubSubClient client(espClient);
 const char* mqtt_server = "192.168.0.101";
-//char msg_t[50];
-//char msg_h[50];
-//char msg_ot[50];
-// ============================== END MQTT ===========================
+// ============================== END MQTT CONFIGURATION ===========================
 
 
-// ============================== GARAGE Setup ======================
+// ============================== GARAGE CONFIGURATION ======================
 int relayPin = D0;
 
-int openStatusPin = D5;
-int closedStatusPin = D7;
-bool openStatus = false;
-bool closedStatus = false;
 long doorOpenTime = 0;
 int garageDoorOpenTimeLimit = 15*60*1000;
 
@@ -118,34 +114,33 @@ bool lightStatus = false;
 const int lightOnLimit = 400;
 int ldrSensorValue;
 
-int pirPin = D3;
+int pirPin = D5;
 bool pirMotionDetected = false;
+long lastPIRReadTime = 0;
+int sensorPIRReadInterval = 2*1000;      // Read PIR sensor every 5 seconds
 
 long lastReadTime = 0;
 int sensorReadInterval = 1000;
-// ============================== END GARAGE ===========================
+// ============================== END GARAGE CONFIGURATION ===========================
 
 
-// ============================== TIME Setup ======================
+// ============================== TIME CONFIGURATION ======================
 #include <TimeLib.h>
-#include <WiFiUdp.h>
-static const char ntpServerName[] = "ca.pool.ntp.org";
-//const int timeZone = 1;     // Central European Time
-const int timeZone = -5;  // Eastern Standard Time (USA)
-//const int timeZone = -4;  // Eastern Daylight Time (USA)
-//const int timeZone = -8;  // Pacific Standard Time (USA)
-//const int timeZone = -7;  // Pacific Daylight Time (USA)
 
-WiFiUDP Udp;
-unsigned int localPort = 8888;  // local port to listen for UDP packets
-
-/*time_t getNtpTime();
-void digitalClockDisplay();
-void printDigits(int digits);
-void sendNTPpacket(IPAddress &address);*/
 time_t prevDisplay = 0; // when the digital clock was displayed
 
-// ============================== END TIME ===========================
+// ============================== END TIME CONFIGURATION ===========================
+
+
+// ============================== PCF8574 CONFIGURATION ======================
+#include <PCF8574.h>
+
+// Set i2c address
+int pcf8574Address = 0x20;
+PCF8574 pcf8574(pcf8574Address);
+bool pcf8574Configured = false;
+
+// ============================== END PCF8574 CONFIGURATION ===========================
 
 // *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 // *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
@@ -282,9 +277,8 @@ void setupWifi() {
 void setupGarageSensors() {
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, HIGH); // Set high to disable relay
-  pinMode(openStatusPin, INPUT);
-  pinMode(closedStatusPin, INPUT);
-  pinMode(pirPin, INPUT);
+  //pinMode(openStatusPin, INPUT);
+  //pinMode(closedStatusPin, INPUT);
 }
 
 // ============================ SETUP MQTT ============================
@@ -297,19 +291,43 @@ void setupMQTT() {
   client.setCallback(callback);
 }
 
-// ============================ SETUP NTP ============================
+// ============================ SETUP PCF8574 ============================
 //
 // Description:
 //
 // ====================================================================
-void setupNTP() {
-  
-  Udp.begin(localPort);
-  Serial.print("Local port: ");
-  Serial.println(Udp.localPort());
-  Serial.println("waiting for sync");
-  setSyncProvider(getNtpTime);
-  setSyncInterval(300);             // 300 seconds = 5 min
+void setupPCF8574() {
+    // The i2c_scanner uses the return value of the Write.endTransmisstion to see if
+    // a device did acknowledge to the address.
+    Wire.beginTransmission(pcf8574Address);
+    byte error = Wire.endTransmission();
+ 
+    if (error == 0)
+    {
+      Serial.print("I2C device found at address 0x");
+      if (pcf8574Address<16) {
+        Serial.print("0"); 
+      }
+      Serial.print(pcf8574Address,HEX);
+      Serial.println("  !");
+      pcf8574Configured = true;
+    } else {
+      Serial.println("Could not configure PCF8574");
+      pcf8574Configured = false;
+    }
+
+  if (pcf8574Configured == true) {
+    // Set pinMode to OUTPUT
+    pcf8574.pinMode(P0, INPUT);
+    pcf8574.pinMode(P1, INPUT);
+    pcf8574.pinMode(P2, INPUT);
+    pcf8574.pinMode(P3, INPUT);
+    pcf8574.pinMode(P4, OUTPUT);
+    pcf8574.pinMode(P5, OUTPUT);
+    pcf8574.pinMode(P6, OUTPUT);
+    pcf8574.pinMode(P7, OUTPUT);
+    pcf8574.begin();
+  }
 }
 
 
@@ -458,24 +476,37 @@ void reconnect() {
 // Description:
 //
 // ====================================================================
-void readDoorSensor() {
+void readDoorSensor(char *msg_door) {
+      
+  PCF8574::DigitalInput di;
+  readPCF8574Sensor(di);
 
-    // read door status
-    if (digitalRead(openStatusPin) == HIGH) {
-      openStatus = true;
-      client.publish("garage/openStatus", "TRUE");
-    } else {
-      openStatus = false;
-      client.publish("garage/openStatus", "FALSE");
-    }
-    
-    if (digitalRead(closedStatusPin) == HIGH) {
+  bool closedStatus = di.p0;
+  bool openStatus = di.p1;
+  
+  // read door status
+  if (openStatus == HIGH) {
+    openStatus = true;
+    //msg_door = {"OPEN"};
+    strcpy(msg_door, "OPEN");
+    pcf8574.digitalWrite(P5,HIGH);  // Set OPEN HIGH
+  } else {
+    if (closedStatus == HIGH) {
       closedStatus = true;
-      client.publish("garage/closedStatus", "TRUE");
+      //msg_door = "CLOSED";
+      strcpy(msg_door, "CLOSED");
+      pcf8574.digitalWrite(P4,HIGH);   // Set CLOSED HIGH
     } else {
       closedStatus = false;
-      client.publish("garage/closedStatus", "FALSE");
+      //msg_door = "IN TRANSIT";
+      strcpy(msg_door, "IN TRANSIT");
+      pcf8574.digitalWrite(P4,LOW);   // Set CLOSED LOW
+      pcf8574.digitalWrite(P5,LOW);   // Set OPEN LOW
     }
+  }
+ 
+  client.publish("garage/openStatus", msg_door);
+
 }
 
 // ============================ READ LDR SENSOR ======================
@@ -504,12 +535,22 @@ void readLDRSensor(int &ldrSensorValue) {
 //
 // ====================================================================
 void readPIRSensor() {
-    pirMotionDetected = digitalRead(pirPin);
-    char msg_motion[50];
-    dtostrf(pirMotionDetected,4,1,msg_motion);
-    client.publish("garage/motionactive", msg_motion);
-    Serial.print(msg_motion);
-    Serial.print("\t");
+   if ((millis() - lastPIRReadTime) > sensorPIRReadInterval) {
+      lastPIRReadTime = millis();
+      pirMotionDetected = digitalRead(pirPin);
+      Serial.println(pirMotionDetected);
+      if (pirMotionDetected == HIGH) {
+        client.publish("garage/motionActive", "ON");
+        Serial.println("Motion Detected");
+        pcf8574.digitalWrite(P6,HIGH);
+      } else {
+        client.publish("garage/motionActive", "OFF");
+        Serial.println("No Motion Detected");
+        pcf8574.digitalWrite(P6,LOW);
+      }
+   }
+
+   
 }
 
 // ============================ READ DS18B20 TEMP SENSOR ======================
@@ -535,14 +576,19 @@ void readDS18B20Sensor(char *msg_gt) {
 //
 // ====================================================================
 void readDHT11Sensor(char *msg_ot, char *msg_oh) {
-    //int rtn = dht.read(dhtPin);
-    t = dht.readTemperature();
-    h = dht.readHumidity();
-    // Check if any reads failed and exit early (to try again).
-    if (isnan(h) || isnan(t) ) {
-      Serial.println("Failed to read from DHT sensor!");
+    
+    if (failedCount < failedCountLimit){
+      t = dht.readTemperature();
+      h = dht.readHumidity();
+      // Check if any reads failed and exit early (to try again).
+      if (isnan(h) || isnan(t) ) {
+        Serial.println("Failed to read from DHT sensor!");
+        failedCount++;
+      } else {
+        failedCount = 0;
+      }
     }
-
+    
     dtostrf(t,4,1,msg_ot);
     client.publish("garage/outsidetemp", msg_ot);
     Serial.print(msg_ot);
@@ -552,15 +598,27 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
     client.publish("garage/outsidehumidity", msg_oh);
     Serial.print(msg_oh);
     Serial.print("\t");
+
 }
 
+
+// ============================ READ PCF8574 SENSOR =======================
+//
+// Description:
+//
+// ====================================================================
+void readPCF8574Sensor(PCF8574::DigitalInput &di) {
+  PCF8574::DigitalInput returnValue = pcf8574.digitalReadAll();
+  di = returnValue;
+  // This doesn't work because di is being set to the address of returnValue which doesn't exist when the function exits!
+}
 
 // ====================== Display Method =================
 // 
 // Method that is called to display the data on the OLED
 // 
 // ===================================================================
-void displayScreen(char *msg_gt, char* msg_oh, char* msg_ot, int ldrSensorValue) {
+void displayScreen(char *msg_gt, char* msg_oh, char* msg_ot, char* msg_door, int ldrSensorValue) {
   unsigned long currentLCDMillis = millis();
   
   // MUST WE SWITCH SCREEN?
@@ -591,7 +649,7 @@ void displayScreen(char *msg_gt, char* msg_oh, char* msg_ot, int ldrSensorValue)
       //showOutsideTemperature(); 
       break;
     case DOORSTATUS:
-      showDoorStatus();
+      showDoorStatus(msg_door);
       break;
     case LIGHTSTATUS:
       showLightStatus(ldrSensorValue);
@@ -698,17 +756,20 @@ void showGarageTemperature(char *msg_gt)
 // Description:
 //
 // ===========================================================================
-void showDoorStatus()
+void showDoorStatus(char *msg_door)
 {
   clearDisplay();
        
   display.println("DOOR");
-  if (openStatus == true)
+  display.println(msg_door);
+  Serial.print("Door Status: ");
+  Serial.println(msg_door);
+  /*if (openStatus == true)
     display.println("OPEN");
   else if (closedStatus == true)
     display.println("CLOSED");
   else
-    display.println("IN TRANSIT");
+    display.println("IN TRANSIT");*/
 
   display.display();
 }
@@ -782,86 +843,6 @@ void showOpenCloseGarageDoor()
   display.display();
 }
 
-// ============================ GET NTP TIME ============================
-//
-// Description:
-//
-// ======================================================================
-time_t getNtpTime()
-{
-  const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
-  byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
-
-  IPAddress ntpServerIP; // NTP server's ip address
-
-  while (Udp.parsePacket() > 0) ; // discard any previously received packets
-  Serial.println("Transmit NTP Request");
-  // get a random server from the pool
-  WiFi.hostByName(ntpServerName, ntpServerIP);
-  Serial.print(ntpServerName); Serial.print(": "); Serial.println(ntpServerIP);
-  sendNTPpacket(ntpServerIP, NTP_PACKET_SIZE, packetBuffer);
-  uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
-    int size = Udp.parsePacket();
-    if (size >= NTP_PACKET_SIZE) {
-      Serial.println("Receive NTP Response");
-      Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
-      unsigned long secsSince1900;
-      // convert four bytes starting at location 40 to a long integer
-      secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
-      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
-      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
-      secsSince1900 |= (unsigned long)packetBuffer[43];
-      int currentTimeZone = timeZone;
-      time_t currentTime = secsSince1900 - 2208988800UL + currentTimeZone * SECS_PER_HOUR;
-      if (isDST(currentTime))
-      {
-        currentTimeZone++;
-        Serial.println ("DST Active");
-      } else {
-        Serial.println("DST Not Active");
-      }
-
-      if(isDaytime())
-        Serial.println("Daytime");
-      else
-        Serial.println("Nighttime");
-
-      return secsSince1900 - 2208988800UL + currentTimeZone * SECS_PER_HOUR;
-    }
-  }
-  Serial.println("No NTP Response :-(");
-  return 0; // return 0 if unable to get the time
-}
-
-// ============================ SEND NTP REQUEST FOR TIME ====================
-//
-// Description:
-// send an NTP request to the time server at the given address
-//
-// ===========================================================================
-void sendNTPpacket(IPAddress &address, const int NTP_PACKET_SIZE, byte packetBuffer[])
-{
-  // set all bytes in the buffer to 0
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
-  // Initialize values needed to form NTP request
-  // (see URL above for details on the packets)
-  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
-  packetBuffer[1] = 0;     // Stratum, or type of clock
-  packetBuffer[2] = 6;     // Polling Interval
-  packetBuffer[3] = 0xEC;  // Peer Clock Precision
-  // 8 bytes of zero for Root Delay & Root Dispersion
-  packetBuffer[12] = 49;
-  packetBuffer[13] = 0x4E;
-  packetBuffer[14] = 49;
-  packetBuffer[15] = 52;
-  // all NTP fields have been given values, now
-  // you can send a packet requesting a timestamp:
-  Udp.beginPacket(address, 123); //NTP requests are to port 123
-  Udp.write(packetBuffer, NTP_PACKET_SIZE);
-  Udp.endPacket();
-}
-
 
 // ============================ CHECK GARAGE DOOR STATUS ===============
 //
@@ -869,7 +850,8 @@ void sendNTPpacket(IPAddress &address, const int NTP_PACKET_SIZE, byte packetBuf
 //
 // ======================================================================
 void CheckGarageDoorStatus() {
-  if (closedStatus) {    // Door is closed, nothing else to do
+  
+  if (/*closedStatus*/false) {    // Door is closed, nothing else to do
     doorOpenTime = millis();
     return;
   }
@@ -930,13 +912,14 @@ void setup() {
 
   // --------- setup PIR  --------- 
   setupPIRSensor();
+  
+  // --------- setup PCF8574  --------- 
+  setupPCF8574();
 
-  // --------- setup NTP  --------- 
-  //setupNTP();   // NTP must be setup after Wifi or NodeMCU will crash!
- 
   
   // --------- setup OTA  --------- 
-  //setupOTA();
+  setupOTA();
+
 
   Serial.println("SETUP COMPLETED SUCCESSFULLY!");
 }
@@ -951,6 +934,8 @@ void loop() {
 char msg_gt[50];
 char msg_oh[50];
 char msg_ot[50];
+char msg_door[50];
+char msg_motion[50];
 int ldrSensorValue;
 
   if (!client.connected()) {
@@ -969,8 +954,10 @@ int ldrSensorValue;
   if (millis() - lastReadTime > sensorReadInterval) {
     lastReadTime = now();
     Serial.println();
-    
-    readDoorSensor();
+
+    if (pcf8574Configured == true) {
+      readDoorSensor(msg_door);
+    }
 
     readLDRSensor(ldrSensorValue);
 
@@ -984,6 +971,6 @@ int ldrSensorValue;
 
   }
   
-  displayScreen(msg_gt, msg_oh, msg_ot, ldrSensorValue);
+  displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue);
   
 }
