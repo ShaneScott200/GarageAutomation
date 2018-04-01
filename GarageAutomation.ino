@@ -19,13 +19,26 @@
   D0 = 16 (Relay Output)
   D1 = 5 (OLED - SCL)
   D2 = 4 (OLED - SDA)
-  D3 = 0 (PIR)     -  Can't use this pin.  It is used to reset the NodeMCU during program download
+  D3 = 0 (DO NOT USE)    -  Can't use this pin.  It is used to reset the NodeMCU during program download
   D4 = 2 (DS18B20)
-  D5 = 14 (Door Open)
-  D6 = 12 (DHT11)
-  D7 = 13 (Door Closed)
-  D8 = 15 (NOT USED) - must not be used with pullup resistor or logic will not download
+  D5 = 14 (PIR)
+  D6 = 12 (Spare)
+  D7 = 13 (DHT11)
+  D8 = 15 (DO NOT USE) - must not be used with pullup resistor or logic will not download
   A0 = A0 (LDR)
+
+  Remote Inputs
+  P0 = (Door Closed)
+  P1 = (Door Open)
+  P2 = Spare
+  P3 = Spare
+
+  Remote Outputs
+  P7 = Door Closed status (Green)
+  P6 = Door Open status (Red)
+  P5 = Motion Detected (Yellow)
+  P4 = Spare (White)
+  
 */
 
 // ============================== WIFI CONFIGURATION ===========================
@@ -74,12 +87,12 @@ long lcdInterval = 2000;
 // ============================== DHT11 CONFIGURATION ============================== 
 #include <DHT.h>
 #define DHTTYPE  DHT21
-int dhtPin=D6;
+int dhtPin=D7;
 DHT dht(dhtPin, DHTTYPE);
 float t = 0;
 float h = 0;
 int failedCount = 0;
-int failedCountLimit = 10;
+int failedCountLimit = 100;
 // ============================== END DHT11 CONFIGURATION ===========================
 
 
@@ -87,7 +100,7 @@ int failedCountLimit = 10;
 #include <OneWire.h>
 #include <DallasTemperature.h>
 // Data wire is plugged into pin D4 on the Arduino
-#define ONE_WIRE_BUS D3
+#define ONE_WIRE_BUS D4
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
@@ -277,8 +290,6 @@ void setupWifi() {
 void setupGarageSensors() {
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, HIGH); // Set high to disable relay
-  //pinMode(openStatusPin, INPUT);
-  //pinMode(closedStatusPin, INPUT);
 }
 
 // ============================ SETUP MQTT ============================
@@ -448,22 +459,7 @@ void reconnect() {
       }
     } 
   }
-  /*
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    if (client.connect("ESP8266Client")) {
-      Serial.println("connected");
-      // Once connected, publish an announcement...
-      client.publish("outTopic", "hello world");
-      // ... and resubscribe
-      client.subscribe("garage/openDoor");
-      client.subscribe("time");
-    } else {
-      Serial.println("failed, rc=");
-      delay(5000);
-    }
-  }*/
+
 }
 
 
@@ -480,32 +476,35 @@ void readDoorSensor(char *msg_door) {
       
   PCF8574::DigitalInput di;
   readPCF8574Sensor(di);
+  int result = 0;
 
   bool closedStatus = di.p0;
   bool openStatus = di.p1;
-  
-  // read door status
-  if (openStatus == HIGH) {
-    openStatus = true;
-    //msg_door = {"OPEN"};
-    strcpy(msg_door, "OPEN");
-    pcf8574.digitalWrite(P5,HIGH);  // Set OPEN HIGH
-  } else {
-    if (closedStatus == HIGH) {
-      closedStatus = true;
-      //msg_door = "CLOSED";
-      strcpy(msg_door, "CLOSED");
-      pcf8574.digitalWrite(P4,HIGH);   // Set CLOSED HIGH
-    } else {
-      closedStatus = false;
-      //msg_door = "IN TRANSIT";
-      strcpy(msg_door, "IN TRANSIT");
-      pcf8574.digitalWrite(P4,LOW);   // Set CLOSED LOW
-      pcf8574.digitalWrite(P5,LOW);   // Set OPEN LOW
-    }
+  result = (int)closedStatus + ((int)openStatus * -1);
+
+  Serial.print("\nDoor Status is: "); Serial.println(result);
+
+  switch (result) {
+      case -1:  // OPEN
+          openStatus = true;
+          strcpy(msg_door, "OPEN");
+          pcf8574.digitalWrite(P6,HIGH);  // Set OPEN HIGH
+        break;
+      case 0:   // IN TRANSIT
+          openStatus = false;
+          closedStatus = false;
+          pcf8574.digitalWrite(P6,LOW);   // Set OPEN LOW
+          pcf8574.digitalWrite(P7,LOW);   // Set CLOSED LOW
+          strcpy(msg_door, "IN TRANSIT");
+        break;
+      case 1:   // CLOSED
+          closedStatus = true;
+          strcpy(msg_door, "CLOSED");
+          pcf8574.digitalWrite(P7,HIGH);   // Set CLOSED HIGH
+        break;
   }
- 
-  client.publish("garage/openStatus", msg_door);
+  
+  client.publish("garage/doorStatus", msg_door);
 
 }
 
@@ -542,11 +541,11 @@ void readPIRSensor() {
       if (pirMotionDetected == HIGH) {
         client.publish("garage/motionActive", "ON");
         Serial.println("Motion Detected");
-        pcf8574.digitalWrite(P6,HIGH);
+        pcf8574.digitalWrite(P5,HIGH);
       } else {
         client.publish("garage/motionActive", "OFF");
         Serial.println("No Motion Detected");
-        pcf8574.digitalWrite(P6,LOW);
+        pcf8574.digitalWrite(P5,LOW);
       }
    }
 
@@ -576,13 +575,16 @@ void readDS18B20Sensor(char *msg_gt) {
 //
 // ====================================================================
 void readDHT11Sensor(char *msg_ot, char *msg_oh) {
-    
+    float prev_t = t;
+    float prev_h = h;
     if (failedCount < failedCountLimit){
       t = dht.readTemperature();
       h = dht.readHumidity();
       // Check if any reads failed and exit early (to try again).
       if (isnan(h) || isnan(t) ) {
         Serial.println("Failed to read from DHT sensor!");
+        t = prev_t;
+        h = prev_h;
         failedCount++;
       } else {
         failedCount = 0;
