@@ -41,7 +41,6 @@
 
   dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
 */
-//char bigstring[100];  // enough room for all strings together
 // ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -943,20 +942,6 @@ void closeGarageDoor() {
   digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
   Log("Send Open/Close Garage Door Command!", "CLOSE\nDOOR"); 
 }
-/*
-// ============================ strcat3 ==================
-//
-// Description:
-//
-// ======================================================================
-char* strcat3(char* string1, char* string2, char* string3) {
- bigstring[0] = 0;          // start with a null string:
- strcat (bigstring, string1);   // add first string
- strcat (bigstring, string2);
- strcat (bigstring, string3);
-
- return bigstring;
-}*/
 
 // ============================ LOG MESSAGES ==================
 //
@@ -970,12 +955,12 @@ void Log(const char *message, const char *displayMessage) {
     client.publish("garage/message", message);
   
   // could use strncpy to copy 10 characters for each line to avoid overflow on OLED
-  /*if (sizeof(displayMessage) >0) {    // or use strlen()
+  if (sizeof(displayMessage) >0) {    // or use strlen()
     clearDisplay();
     display.println(displayMessage);
     display.display();
-  previousLCDMillis = millis();
-  }*/
+    //previousLCDMillis = millis();
+  }
 }
 
 // ============================ SETUP ==================================
