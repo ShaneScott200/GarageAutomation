@@ -41,7 +41,7 @@
 
   dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
 */
-char bigstring[100];  // enough room for all strings together
+//char bigstring[100];  // enough room for all strings together
 // ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -407,6 +407,12 @@ void setupOTA() {
 //
 // ====================================================================
 void callback(char* topic, byte* payload, unsigned int length) {
+    /*const byte *p;
+    p = payload;
+    while (*p) {
+        Serial.print(*p);
+        p++;
+    }*/
 /*  for (int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
@@ -443,7 +449,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
       
      // set the time
      setTime(timeValues[3],timeValues[4],timeValues[5],timeValues[2],timeValues[1],timeValues[0]);
-     Log(topic, NULL);    // TODO: This doesn't work because it concatenates the strings together and stores them in topic
      Log("Time set", "TIME\nSET");
     }
 }
@@ -542,16 +547,8 @@ void readTime(char *msg_date, char *msg_time) {
   }
   strcat(t_msg_time, temp);
   
-  Serial.println(t_msg_date);
-  Serial.println(t_msg_time);
-
   strcpy(msg_date, t_msg_date);
   strcpy(msg_time, t_msg_time);
-
-
-/*
-    dtostrf(DS18B20_temp,4,1,msg_gt);
-    client.publish("garage/garagetemp", msg_gt);*/
 }
 
 
@@ -700,35 +697,13 @@ void readPCF8574Sensor(PCF8574::DigitalInput &di) {
 // Description:
 //
 // ====================================================================
-void publishTime() {
-  /*char msg_time[] = {"0000-00-00 00:00:00\0"};
-
+void publishTime(char msg_date[], char msg_time[]) {
+  char date_time [50] = "2018";
+  strcpy(date_time, msg_date);
+  strcat(date_time, "-");
+  strcat(date_time, msg_time);
   
-  // digital clock display of the time
-  msg_time[0] = year(); 
-  
-  msg_time[5] = month();
-  
-  msg_time[8] = day();
-
-  msg_time[11]=hour();
-  
-  if(minute() < 10){
-    msg_time[14]=('0');
-    msg_time[15]=minute();
-  } else {
-    msg_time[14]=minute();
-  }
-
-  if(second() < 10){
-    msg_time[14]=('0');
-    msg_time[15]=second();
-  } else {
-    msg_time[14]=second();
-  }
-  Serial.print("\nTime: "); Serial.println(now());//Serial.println(msg_time);
-
-  client.publish("garage/time", msg_time);*/
+  client.publish("garage/time", date_time);
 }
 
 
@@ -991,13 +966,15 @@ char* strcat3(char* string1, char* string2, char* string3) {
 void Log(const char *message, const char *displayMessage) {
   Serial.println(message); 
   
-  if (client.connected())
+  //if (client.connected())
     client.publish("garage/message", message);
   
-  /*if (sizeof(displayMessage) >0) {
+  // could use strncpy to copy 10 characters for each line to avoid overflow on OLED
+  /*if (sizeof(displayMessage) >0) {    // or use strlen()
     clearDisplay();
     display.println(displayMessage);
     display.display();
+  previousLCDMillis = millis();
   }*/
 }
 
@@ -1090,7 +1067,7 @@ char msg_time[50];
 
     CheckGarageDoorStatus();
 
-    publishTime();
+    publishTime(msg_date, msg_time);
 
   }
   
