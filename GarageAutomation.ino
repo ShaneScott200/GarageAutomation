@@ -38,9 +38,10 @@
   P6 = Door Open status (Red)
   P5 = Motion Detected (Yellow)
   P4 = Spare (White)
-  
-*/
 
+  dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
+*/
+char bigstring[100];  // enough room for all strings together
 // ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -73,12 +74,12 @@ int screen = 0;
 int screenMax = 5;
 bool screenChanged = true;   // initially we have a new screen,  by definition 
 // defines of the screens to show
-#define GARAGETEMPERATURE     0
-#define OUTSIDEHUMIDITY       1
-#define OUTSIDETEMPERATURE    2
-#define DOORSTATUS            3
-#define LIGHTSTATUS           4
-#define TIME                  5
+#define TIME                  0
+#define GARAGETEMPERATURE     1
+#define OUTSIDEHUMIDITY       2
+#define OUTSIDETEMPERATURE    3
+#define DOORSTATUS            4
+#define LIGHTSTATUS           5
 long previousLCDMillis = 0;    // for LCD screen update
 long lcdInterval = 2000;
 // ============================== END SCREEN CONFIGURATION ===========================
@@ -92,7 +93,7 @@ DHT dht(dhtPin, DHTTYPE);
 float t = 0;
 float h = 0;
 int failedCount = 0;
-int failedCountLimit = 100;
+int failedCountLimit = 10;
 // ============================== END DHT11 CONFIGURATION ===========================
 
 
@@ -107,6 +108,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 double DS18B20_temp = 0;
 // ============================== END DS18B20 CONFIGURATION ======================
+
 
 // ============================== MQTT CONFIGURATION =======================
 //#include<stdlib.h>
@@ -167,9 +169,7 @@ void setupOLED() {
     // by default, we'll generate the high voltage from the 3.3v line internally!
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x64)
   
-  showInit();
-  // init done
-  Serial.println("OLED Display Initialized!");
+  Log("OLED Display setup complete!", "OLED\nSETUP");
 }
 
 // ============================ SETUP TEMP SENSOR =====================
@@ -180,6 +180,8 @@ void setupOLED() {
 void setupDS18B20() {
   sensors.begin();
   getDeviceAddress();
+
+  Log("DS18B20 setup complete!", "DS18B20\nSETUP");
 }
 
 // ============================ GET DEVICE ADDRESS =====================
@@ -191,20 +193,19 @@ void getDeviceAddress(void) {
   byte i;
   byte dsAddress[8];
   
-  Serial.println( "Searching for DS18B20..." );
+  Log( "Searching for DS18B20...", NULL);
   oneWire.reset_search();  // Start the search with the first device
   if( !oneWire.search(dsAddress) )
   {
-    Serial.println( "none found. Using default MAC address." );
+    Log( "none found. Using default MAC address.",NULL);
   } else {
-    Serial.println( "success. Setting MAC address:" );
-    Serial.print( " DS18B20 ROM  =" );
+    Log( "success. Setting MAC address:", NULL);
+    /*Serial.print( " DS18B20 ROM  =" );
     for( i = 0; i < 8; i++)
     {
-      Serial.write(' ');
+      Serial.print(' ');
       Serial.print( dsAddress[i], HEX );
-    }
-    Serial.println();
+    }*/
     
     // Offset array to skip DS18B20 family code, and skip mac[0]
     mac[1] = dsAddress[3];
@@ -213,14 +214,14 @@ void getDeviceAddress(void) {
     mac[4] = dsAddress[6];
     mac[5] = dsAddress[7];
   }
-  
+  /*
   Serial.print( " Ethernet MAC =" );
   for( i = 0; i < 6; i++ )
   {
     Serial.write( ' ' );
     Serial.print( mac[i], HEX );
   }
-  Serial.println();
+  Serial.println();*/
   
   oneWire.reset_search();
   return;
@@ -233,6 +234,7 @@ void getDeviceAddress(void) {
 // ====================================================================
 void setupDHT() {
   dht.begin();
+  Log("DHT setup complete!", "DHT\nSETUP");
 }
 
 // ============================ SETUP PIR SENSOR =====================
@@ -242,6 +244,7 @@ void setupDHT() {
 // ====================================================================
 void setupPIRSensor() {
   pinMode(pirPin, INPUT);
+  Log("PIR setup complete!", "PIR\nSETUP");
 }
 
 // ============================ SETUP WIFI ============================
@@ -253,15 +256,16 @@ void setupWifi() {
   bool connected = false;
   
   // We start by connecting to a WiFi network
-  Serial.print("Connecting to "); Serial.println(ssid);
+  Log (strcat("Connecting to ", ssid), NULL);
   WiFi.mode(WIFI_STA); // <<< Station
   WiFi.begin(ssid, password);
-
+  char i_msg[2];
   // Try to connect 10 times with 500 msec inbetween each attempt
   for (int i =0; i < 10; i++)
   {
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.print("Could not connect.  Attempt #"); Serial.println(i);
+      dtostrf(i, 2, 0, i_msg);    // dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
+      Log (strcat("Could not connect.  Attempt # ", i_msg), NULL);
       delay(500);
     } else {
       connected = true;
@@ -271,15 +275,34 @@ void setupWifi() {
 
   if (connected)
   {
-    Serial.print("WiFi connected! "); Serial.print("IP address: "); Serial.println(WiFi.localIP());
+    char *ip_address = IPtoCharArray(WiFi.localIP());
+    Log (strcat("WiFi connected! IP address: ", ip_address), NULL);
   }
   else
   {
-    Serial.println(" ");
-    Serial.print("Could not connect to ");
-    Serial.println(ssid);
+    Log (strcat("Could not connect to ", ssid), NULL);
+
   }
 
+}
+
+// ========================= IPtoCharArray =======================
+//
+// Description: Used to convert IP Address to char array for printing
+//
+// =====================================================================
+char* IPtoCharArray(IPAddress  _address)
+{
+    static char szRet[20];
+    String str = String(_address[0]);
+    str += ".";
+    str += String(_address[1]);
+    str += ".";
+    str += String(_address[2]);
+    str += ".";
+    str += String(_address[3]);
+    str.toCharArray(szRet, 20);
+    return szRet;
 }
 
 // ========================= SETUP GARAGE SENSOR =======================
@@ -290,6 +313,7 @@ void setupWifi() {
 void setupGarageSensors() {
   pinMode(relayPin, OUTPUT);
   digitalWrite(relayPin, HIGH); // Set high to disable relay
+  Log("Garage Sensors setup complete!", "GARAGE\nSETUP");
 }
 
 // ============================ SETUP MQTT ============================
@@ -300,6 +324,7 @@ void setupGarageSensors() {
 void setupMQTT() {
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+  Log("MQTT setup complete!", "MQTT\nSETUP");
 }
 
 // ============================ SETUP PCF8574 ============================
@@ -313,32 +338,26 @@ void setupPCF8574() {
     Wire.beginTransmission(pcf8574Address);
     byte error = Wire.endTransmission();
  
-    if (error == 0)
+    if (error != 0)
     {
-      Serial.print("I2C device found at address 0x");
-      if (pcf8574Address<16) {
-        Serial.print("0"); 
-      }
-      Serial.print(pcf8574Address,HEX);
-      Serial.println("  !");
-      pcf8574Configured = true;
-    } else {
-      Serial.println("Could not configure PCF8574");
+      Log("Could not configure PCF8574!", "PCF8574\nERROR");
       pcf8574Configured = false;
     }
 
-  if (pcf8574Configured == true) {
-    // Set pinMode to OUTPUT
-    pcf8574.pinMode(P0, INPUT);
-    pcf8574.pinMode(P1, INPUT);
-    pcf8574.pinMode(P2, INPUT);
-    pcf8574.pinMode(P3, INPUT);
-    pcf8574.pinMode(P4, OUTPUT);
-    pcf8574.pinMode(P5, OUTPUT);
-    pcf8574.pinMode(P6, OUTPUT);
-    pcf8574.pinMode(P7, OUTPUT);
-    pcf8574.begin();
-  }
+  // Set pinMode to OUTPUT
+  pcf8574.pinMode(P0, INPUT);
+  pcf8574.pinMode(P1, INPUT);
+  pcf8574.pinMode(P2, INPUT);
+  pcf8574.pinMode(P3, INPUT);
+  pcf8574.pinMode(P4, OUTPUT);
+  pcf8574.pinMode(P5, OUTPUT);
+  pcf8574.pinMode(P6, OUTPUT);
+  pcf8574.pinMode(P7, OUTPUT);
+  pcf8574.begin();
+
+  pcf8574Configured = true;
+  
+  Log("PCF8574 setup complete!", "PCF8574\nSETUP");
 }
 
 
@@ -358,23 +377,24 @@ void setupOTA() {
   // ArduinoOTA.setPassword((const char *)"123");
 
   ArduinoOTA.onStart([]() {
-    Serial.println("Start");
+    Log("OTA Start", NULL);
   });
   ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
+    Log("OTA End", NULL);
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    Log(strcat("Error: ", (char*)(long)error), NULL);
+    if (error == OTA_AUTH_ERROR) Log("Auth Failed", NULL);
+    else if (error == OTA_BEGIN_ERROR) Log("Begin Failed", NULL);
+    else if (error == OTA_CONNECT_ERROR) Log("Connect Failed", NULL);
+    else if (error == OTA_RECEIVE_ERROR) Log("Receive Failed", NULL);
+    else if (error == OTA_END_ERROR) Log("End Failed", NULL);
   });
   ArduinoOTA.begin();
+  Log("OTA setup complete!", "OTA/nSETUP");
 }
 
 // *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
@@ -387,15 +407,11 @@ void setupOTA() {
 //
 // ====================================================================
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.println();
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  for (int i = 0; i < length; i++) {
+/*  for (int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
-  Serial.println();
-
+  Serial.println(" ");    // finish the payload printing with a new line.
+*/
   if (strcmp(topic,"garage/openDoor")==0){
       // Switch on the relay if a 1 was received as first character
       if ((char)payload[0] == '1') {
@@ -427,7 +443,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
       
      // set the time
      setTime(timeValues[3],timeValues[4],timeValues[5],timeValues[2],timeValues[1],timeValues[0]);
-     Serial.println("Time set");
+     Log(topic, NULL);    // TODO: This doesn't work because it concatenates the strings together and stores them in topic
+     Log("Time set", "TIME\nSET");
     }
 }
 
@@ -444,17 +461,17 @@ void reconnect() {
   for (int i =0; i < 10; i++)
   {
     if (!client.connected()) {
-       Serial.print("Attempting MQTT connection...");
+       Log("Attempting MQTT connection...", NULL);
       // Attempt to connect
       if (client.connect("ESP8266Client")) {
-        Serial.println("connected");
+        Log("connected", NULL);
         // Once connected, publish an announcement...
         client.publish("outTopic", "hello world");
         // ... and resubscribe
         client.subscribe("garage/openDoor");
         client.subscribe("time");
       } else {
-        Serial.println("reconnect failed");
+        Log("reconnect failed", NULL);
         delay(500);
       }
     } 
@@ -466,6 +483,77 @@ void reconnect() {
 // *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 // *-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 
+// ============================ READ TIME ======================
+//
+// Description:
+//
+// ====================================================================
+void readTime(char *msg_date, char *msg_time) {
+  // TODO: Need to create temporary variables and re-assign them at the end of the function
+  char temp[4] = {0};
+  char t_msg_date[50] = {0};
+  char t_msg_time[50] = {0};
+  
+  // year
+  dtostrf(year(), 4, 0, t_msg_date);
+  strcat(t_msg_date, "-");
+  // month
+  if(month() < 10){
+    strcat(t_msg_date, "0");
+    dtostrf(month(), 1, 0, temp);
+  } else {
+    dtostrf(month(), 2, 0, temp);
+  }
+  strcat(t_msg_date, temp);
+  strcat(t_msg_date, "-");
+  // day
+  if(day() < 10){
+    strcat(t_msg_date, "0");
+    dtostrf(day(), 1, 0, temp);
+  } else {
+    dtostrf(day(), 2, 0, temp);
+  }
+  strcat(t_msg_date, temp);
+  
+  // hour
+  if(hour() < 10){
+    dtostrf(hour(), 1, 0, t_msg_time);
+    //strcat(t_msg_time, "0");
+  } else {
+    dtostrf(hour(), 2, 0, temp);
+  }
+  strcat(t_msg_time, temp);
+  strcat(t_msg_time, ":");
+  // minute
+  if(minute() < 10){
+    strcat(t_msg_time, "0");
+    dtostrf(minute(), 1, 0, temp);
+  } else {
+    dtostrf(minute(), 2, 0, temp);
+  }
+  strcat(t_msg_time, temp);
+  strcat(t_msg_time, ":");
+  // second
+  if(second() < 10){
+    strcat(t_msg_time, "0");
+    dtostrf(second(), 1, 0, temp);
+  } else {
+    dtostrf(second(), 2, 0, temp);
+  }
+  strcat(t_msg_time, temp);
+  
+  Serial.println(t_msg_date);
+  Serial.println(t_msg_time);
+
+  strcpy(msg_date, t_msg_date);
+  strcpy(msg_time, t_msg_time);
+
+
+/*
+    dtostrf(DS18B20_temp,4,1,msg_gt);
+    client.publish("garage/garagetemp", msg_gt);*/
+}
+
 
 // ============================ READ DOOR SENSORS ====================
 //
@@ -473,7 +561,11 @@ void reconnect() {
 //
 // ====================================================================
 void readDoorSensor(char *msg_door) {
-      
+
+  /*char* openState = "OPEN";
+  char* closedState = "CLOSED";
+  char* inTransitState = "IN TRANSIT";
+  */
   PCF8574::DigitalInput di;
   readPCF8574Sensor(di);
   int result = 0;
@@ -482,12 +574,11 @@ void readDoorSensor(char *msg_door) {
   bool openStatus = di.p1;
   result = (int)closedStatus + ((int)openStatus * -1);
 
-  Serial.print("\nDoor Status is: "); Serial.println(result);
-
   switch (result) {
       case -1:  // OPEN
           openStatus = true;
           strcpy(msg_door, "OPEN");
+          //msg_door = openState;
           pcf8574.digitalWrite(P6,HIGH);  // Set OPEN HIGH
         break;
       case 0:   // IN TRANSIT
@@ -496,13 +587,16 @@ void readDoorSensor(char *msg_door) {
           pcf8574.digitalWrite(P6,LOW);   // Set OPEN LOW
           pcf8574.digitalWrite(P7,LOW);   // Set CLOSED LOW
           strcpy(msg_door, "IN TRANSIT");
+          //msg_door = inTransitState;
         break;
       case 1:   // CLOSED
           closedStatus = true;
           strcpy(msg_door, "CLOSED");
+          //msg_door = closedState;
           pcf8574.digitalWrite(P7,HIGH);   // Set CLOSED HIGH
         break;
   }
+  //Log (strcat("Door Status is: ", msg_door), NULL);
   
   client.publish("garage/doorStatus", msg_door);
 
@@ -524,8 +618,6 @@ void readLDRSensor(int &ldrSensorValue) {
     char msg_light[50];
     dtostrf(ldrSensorValue,4,1,msg_light);
     client.publish("garage/lightlevel", msg_light);
-    Serial.print(msg_light);
-    Serial.print("\t");
 }
 
 // ============================ READ PIR SENSOR ======================
@@ -537,19 +629,15 @@ void readPIRSensor() {
    if ((millis() - lastPIRReadTime) > sensorPIRReadInterval) {
       lastPIRReadTime = millis();
       pirMotionDetected = digitalRead(pirPin);
-      Serial.println(pirMotionDetected);
+
       if (pirMotionDetected == HIGH) {
         client.publish("garage/motionActive", "ON");
-        Serial.println("Motion Detected");
         pcf8574.digitalWrite(P5,HIGH);
       } else {
         client.publish("garage/motionActive", "OFF");
-        Serial.println("No Motion Detected");
         pcf8574.digitalWrite(P5,LOW);
       }
    }
-
-   
 }
 
 // ============================ READ DS18B20 TEMP SENSOR ======================
@@ -562,11 +650,8 @@ void readDS18B20Sensor(char *msg_gt) {
     sensors.requestTemperatures();  
     DS18B20_temp = sensors.getTempCByIndex(0);
 
-    //dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
     dtostrf(DS18B20_temp,4,1,msg_gt);
     client.publish("garage/garagetemp", msg_gt);
-    Serial.print(msg_gt);
-    Serial.print("\t");
 }
 
 // ============================ READ DHT SENSOR =======================
@@ -582,7 +667,7 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
       h = dht.readHumidity();
       // Check if any reads failed and exit early (to try again).
       if (isnan(h) || isnan(t) ) {
-        Serial.println("Failed to read from DHT sensor!");
+        Log("Failed to read from DHT sensor!",NULL);
         t = prev_t;
         h = prev_h;
         failedCount++;
@@ -593,16 +678,11 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
     
     dtostrf(t,4,1,msg_ot);
     client.publish("garage/outsidetemp", msg_ot);
-    Serial.print(msg_ot);
-    Serial.print("\t");
     
     dtostrf(h,4,1,msg_oh);
     client.publish("garage/outsidehumidity", msg_oh);
-    Serial.print(msg_oh);
-    Serial.print("\t");
 
 }
-
 
 // ============================ READ PCF8574 SENSOR =======================
 //
@@ -612,15 +692,52 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
 void readPCF8574Sensor(PCF8574::DigitalInput &di) {
   PCF8574::DigitalInput returnValue = pcf8574.digitalReadAll();
   di = returnValue;
-  // This doesn't work because di is being set to the address of returnValue which doesn't exist when the function exits!
 }
+
+
+// ============================ PUBLISH TIME DATA =======================
+//
+// Description:
+//
+// ====================================================================
+void publishTime() {
+  /*char msg_time[] = {"0000-00-00 00:00:00\0"};
+
+  
+  // digital clock display of the time
+  msg_time[0] = year(); 
+  
+  msg_time[5] = month();
+  
+  msg_time[8] = day();
+
+  msg_time[11]=hour();
+  
+  if(minute() < 10){
+    msg_time[14]=('0');
+    msg_time[15]=minute();
+  } else {
+    msg_time[14]=minute();
+  }
+
+  if(second() < 10){
+    msg_time[14]=('0');
+    msg_time[15]=second();
+  } else {
+    msg_time[14]=second();
+  }
+  Serial.print("\nTime: "); Serial.println(now());//Serial.println(msg_time);
+
+  client.publish("garage/time", msg_time);*/
+}
+
 
 // ====================== Display Method =================
 // 
 // Method that is called to display the data on the OLED
 // 
 // ===================================================================
-void displayScreen(char *msg_gt, char* msg_oh, char* msg_ot, char* msg_door, int ldrSensorValue) {
+void displayScreen(const char *msg_gt, const char* msg_oh, const char* msg_ot, const char* msg_door, const int ldrSensorValue) {
   unsigned long currentLCDMillis = millis();
   
   // MUST WE SWITCH SCREEN?
@@ -640,22 +757,18 @@ void displayScreen(char *msg_gt, char* msg_oh, char* msg_ot, char* msg_door, int
     {
     case GARAGETEMPERATURE: 
       showGarageTemperature(msg_gt); 
-      //showGarageTemperature(); 
       break;
     case OUTSIDEHUMIDITY: 
       showOutsideHumidity(msg_oh);
-      //showOutsideHumidity();
       break;
     case OUTSIDETEMPERATURE: 
       showOutsideTemperature(msg_ot); 
-      //showOutsideTemperature(); 
       break;
     case DOORSTATUS:
       showDoorStatus(msg_door);
       break;
     case LIGHTSTATUS:
       showLightStatus(ldrSensorValue);
-      //showLightStatus();
       break;
     case TIME:
       showTime();
@@ -681,34 +794,17 @@ void clearDisplay() {
 }
 
 
-// ============================ SHOW WELCOME DISPLAY =======================
-//
-// Description:
-//
-// ===========================================================================
-void showInit()
-{
-  clearDisplay();
-       
-  display.println("SENSOR");
-  display.println("INIT"); 
-
-  display.display();
-}
-
-
 // ============================ SHOW OUTSIDE TEMPERATURE DISPLAY ============
 //
 // Description:
 //
 // ===========================================================================
-void showOutsideTemperature(char *msg_ot)
-//void showOutsideTemperature()
+void showOutsideTemperature(const char *msg_ot)
 {
   clearDisplay();
        
   display.println("OUTSIDE:");
-  display.print(msg_ot); // DHT11 Temperature
+  display.print(msg_ot); // DHT21 Temperature
   display.print((char)248);          
   display.println("C");
 
@@ -721,8 +817,7 @@ void showOutsideTemperature(char *msg_ot)
 // Description:
 //
 // ===========================================================================
-void showOutsideHumidity(char *msg_oh)
-//void showOutsideHumidity()
+void showOutsideHumidity(const char *msg_oh)
 {
   clearDisplay();
        
@@ -739,8 +834,7 @@ void showOutsideHumidity(char *msg_oh)
 // Description:
 //
 // ===========================================================================
-void showGarageTemperature(char *msg_gt)
-//void showGarageTemperature()
+void showGarageTemperature(const char *msg_gt)
 {
   clearDisplay();
        
@@ -758,20 +852,12 @@ void showGarageTemperature(char *msg_gt)
 // Description:
 //
 // ===========================================================================
-void showDoorStatus(char *msg_door)
+void showDoorStatus(const char *msg_door)
 {
   clearDisplay();
        
   display.println("DOOR");
   display.println(msg_door);
-  Serial.print("Door Status: ");
-  Serial.println(msg_door);
-  /*if (openStatus == true)
-    display.println("OPEN");
-  else if (closedStatus == true)
-    display.println("CLOSED");
-  else
-    display.println("IN TRANSIT");*/
 
   display.display();
 }
@@ -782,8 +868,7 @@ void showDoorStatus(char *msg_door)
 // Description:
 //
 // ===========================================================================
-void showLightStatus(int ldrSensorValue)
-//void showLightStatus()
+void showLightStatus(const int ldrSensorValue)
 {
   clearDisplay();
        
@@ -853,18 +938,17 @@ void showOpenCloseGarageDoor()
 // ======================================================================
 void CheckGarageDoorStatus() {
   
-  if (/*closedStatus*/false) {    // Door is closed, nothing else to do
+  if (/*TODO: closedStatus*/false) {    // Door is closed, nothing else to do
     doorOpenTime = millis();
     return;
   }
 
   if (pirMotionDetected) {
-      Serial.println("Motion Detected!  Reset timer!");
       doorOpenTime = millis();
       return;
     }
   long garageDoorTimeElapsed = millis() - doorOpenTime;
-  Serial.print("Garage Door Time Elapsed: "); Serial.println(garageDoorTimeElapsed);
+
   if (garageDoorTimeElapsed > garageDoorOpenTimeLimit) {    // 15 minutes
     closeGarageDoor();
     doorOpenTime = millis();
@@ -882,7 +966,39 @@ void closeGarageDoor() {
   // but actually the LED is on; this is because it is acive low on the ESP-01)
   delay(1000);
   digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
-  Serial.println("Send Open/Close Garage Door Command!"); 
+  Log("Send Open/Close Garage Door Command!", "CLOSE\nDOOR"); 
+}
+/*
+// ============================ strcat3 ==================
+//
+// Description:
+//
+// ======================================================================
+char* strcat3(char* string1, char* string2, char* string3) {
+ bigstring[0] = 0;          // start with a null string:
+ strcat (bigstring, string1);   // add first string
+ strcat (bigstring, string2);
+ strcat (bigstring, string3);
+
+ return bigstring;
+}*/
+
+// ============================ LOG MESSAGES ==================
+//
+// Description:
+//
+// ======================================================================
+void Log(const char *message, const char *displayMessage) {
+  Serial.println(message); 
+  
+  if (client.connected())
+    client.publish("garage/message", message);
+  
+  /*if (sizeof(displayMessage) >0) {
+    clearDisplay();
+    display.println(displayMessage);
+    display.display();
+  }*/
 }
 
 // ============================ SETUP ==================================
@@ -923,7 +1039,7 @@ void setup() {
   setupOTA();
 
 
-  Serial.println("SETUP COMPLETED SUCCESSFULLY!");
+  Log("SETUP COMPLETED SUCCESSFULLY!", "SETUP\nCOMPLETE");
 }
 
 // ============================ LOOP ==================================
@@ -939,13 +1055,16 @@ char msg_ot[50];
 char msg_door[50];
 char msg_motion[50];
 int ldrSensorValue;
+char msg_date[50];
+char msg_time[50];
+
 
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
 
-  //ArduinoOTA.handle();
+  ArduinoOTA.handle();
 
   if (timeStatus() != timeNotSet) {
     if (now() != prevDisplay) { //update the display only if time has changed
@@ -955,8 +1074,8 @@ int ldrSensorValue;
   
   if (millis() - lastReadTime > sensorReadInterval) {
     lastReadTime = now();
-    Serial.println();
-
+    readTime(msg_date, msg_time);
+    
     if (pcf8574Configured == true) {
       readDoorSensor(msg_door);
     }
@@ -970,6 +1089,8 @@ int ldrSensorValue;
     readDHT11Sensor(msg_ot, msg_oh);
 
     CheckGarageDoorStatus();
+
+    publishTime();
 
   }
   
