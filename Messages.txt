@@ -1,0 +1,12 @@
+Topic			Message		Values
+outTopic		hello world	
+garage/doorStatus	msg_door	OPEN, IN TRANSIT, CLOSED
+garage/lightlevel	msg_light	0-1023
+garage/motionActive	ON	
+garage/motionActive	OFF	
+garage/garagetemp	msg_gt		xx.x
+garage/outsidetemp	msg_ot		xx.x
+garage/outsidehumidity	msg_oh		xx.x
+garage/time		date_time	YYYY-MM-DD -HH:MM-SEC
+garage/message		message	
+

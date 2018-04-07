@@ -110,7 +110,6 @@ double DS18B20_temp = 0;
 
 
 // ============================== MQTT CONFIGURATION =======================
-//#include<stdlib.h>
 WiFiClient espClient;
 PubSubClient client(espClient);
 const char* mqtt_server = "192.168.0.101";
@@ -199,12 +198,6 @@ void getDeviceAddress(void) {
     Log( "none found. Using default MAC address.",NULL);
   } else {
     Log( "success. Setting MAC address:", NULL);
-    /*Serial.print( " DS18B20 ROM  =" );
-    for( i = 0; i < 8; i++)
-    {
-      Serial.print(' ');
-      Serial.print( dsAddress[i], HEX );
-    }*/
     
     // Offset array to skip DS18B20 family code, and skip mac[0]
     mac[1] = dsAddress[3];
@@ -213,14 +206,6 @@ void getDeviceAddress(void) {
     mac[4] = dsAddress[6];
     mac[5] = dsAddress[7];
   }
-  /*
-  Serial.print( " Ethernet MAC =" );
-  for( i = 0; i < 6; i++ )
-  {
-    Serial.write( ' ' );
-    Serial.print( mac[i], HEX );
-  }
-  Serial.println();*/
   
   oneWire.reset_search();
   return;
@@ -355,6 +340,24 @@ void setupPCF8574() {
   pcf8574.begin();
 
   pcf8574Configured = true;
+
+  // Test LED outputs
+  pcf8574.digitalWrite(P7, HIGH);
+  delay(250);
+  pcf8574.digitalWrite(P7, LOW);
+  delay(250);
+  pcf8574.digitalWrite(P6, HIGH);
+  delay(250);
+  pcf8574.digitalWrite(P6, LOW);
+  delay(250);
+  pcf8574.digitalWrite(P5, HIGH);
+  delay(250);
+  pcf8574.digitalWrite(P5, LOW);
+  delay(250);
+  pcf8574.digitalWrite(P4, HIGH);
+  delay(250);
+  pcf8574.digitalWrite(P4, LOW);
+  delay(250);
   
   Log("PCF8574 setup complete!", "PCF8574\nSETUP");
 }
@@ -382,7 +385,7 @@ void setupOTA() {
     Log("OTA End", NULL);
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    //Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
     Log(strcat("Error: ", (char*)(long)error), NULL);
@@ -606,10 +609,13 @@ void readDoorSensor(char *msg_door) {
 void readLDRSensor(int &ldrSensorValue) {
 
     ldrSensorValue = analogRead(ldrPin);
-    if (ldrSensorValue > lightOnLimit)
+    if (ldrSensorValue > lightOnLimit) {
       lightStatus = true;
-    else
+      client.publish("garage/lightStatus", "ON");
+    } else {
       lightStatus = false;
+      client.publish("garage/lightStatus", "OFF");
+    }
 
     char msg_light[50];
     dtostrf(ldrSensorValue,4,1,msg_light);
@@ -949,7 +955,7 @@ void closeGarageDoor() {
 //
 // ======================================================================
 void Log(const char *message, const char *displayMessage) {
-  Serial.println(message); 
+  //Serial.println(message); 
   
   //if (client.connected())
     client.publish("garage/message", message);
