@@ -1,0 +1,5 @@
+git add *
+
+git commit "commit comment"
+
+git push -u origin master

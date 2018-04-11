@@ -296,7 +296,8 @@ char* IPtoCharArray(IPAddress  _address)
 // =====================================================================
 void setupGarageSensors() {
   pinMode(relayPin, OUTPUT);
-  digitalWrite(relayPin, HIGH); // Set high to disable relay
+  digitalWrite(relayPin, LOW);
+  
   Log("Garage Sensors setup complete!", "GARAGE\nSETUP");
 }
 
@@ -409,49 +410,29 @@ void setupOTA() {
 //
 // ====================================================================
 void callback(char* topic, byte* payload, unsigned int length) {
-    /*const byte *p;
-    p = payload;
-    while (*p) {
-        Serial.print(*p);
-        p++;
-    }*/
-/*  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println(" ");    // finish the payload printing with a new line.
-*/
+
   if (strcmp(topic,"garage/openDoor")==0){
       // Switch on the relay if a 1 was received as first character
       if ((char)payload[0] == '1') {
         closeGarageDoor();
-      } else {
-        digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
-      }
+      } 
   }
 
   if (strcmp(topic,"time")==0){
-      // Switch on the relay if a 1 was received as first character
-      // parse time string from 'payload'  format is: "yyyy-mm-dd-hr-min-sec"
-      int timeValues[] = {2018,3,23,12,05,0};         // Initialize time array with a default time.  If there is an error the value will be 0.
-      char instring[length];                          // create the array to hold the payload converted to char (required for strtok)
-      for (int i = 0; i<length; i++) {                // convert the payload to char array
-        instring[i] = (char)payload[i];
-      }
-      char delimiters[] = "-";                        // Could also add ‘:’ for time
-      const  int MAXVALUES = 6;
-      char* valPosition;
-     
-      //This initializes strtok with our string to tokenize
-      valPosition = strtok(instring, delimiters);       // Get the first item from the payload
-      for (int i  = 0; i < MAXVALUES; i++){             // Populate the array with the remaining values in the payload
-        timeValues[i] = atoi(valPosition);              // convert value to int and store time values in array.
-        //Here we pass in a NULL value, which tells strtok to continue working with the previous string
-        valPosition = strtok(NULL, delimiters);
-      }
-      
-     // set the time
-     setTime(timeValues[3],timeValues[4],timeValues[5],timeValues[2],timeValues[1],timeValues[0]);
+     payload[length] = '\0'; // Make payload a string by NULL terminating it.
+     long Val = atol((char *)payload);
+     setTime(Val);
+
+     // Adjust to EST (and account for Daylight Saving Time)
+     long adjustValue = 0;
+     if (isDST(Val)) {
+        adjustValue = 4 * SECS_PER_HOUR;
+     } else {
+        adjustValue = 5 * SECS_PER_HOUR;
+     }
+     adjustTime(-adjustValue);  // negative so that it subtracts time to get to EST
      Log("Time set", "TIME\nSET");
+     
     }
 }
 
@@ -916,9 +897,9 @@ void showOpenCloseGarageDoor()
 // Description:
 //
 // ======================================================================
-void CheckGarageDoorStatus() {
-  
-  if (/*TODO: closedStatus*/false) {    // Door is closed, nothing else to do
+void CheckGarageDoorStatus(const char *msg_door) {
+
+  if (msg_door != "OPEN") {    // Door is closed or in transit, nothing else to do
     doorOpenTime = millis();
     return;
   }
@@ -926,9 +907,11 @@ void CheckGarageDoorStatus() {
   if (pirMotionDetected) {
       doorOpenTime = millis();
       return;
-    }
+  }
+  
   long garageDoorTimeElapsed = millis() - doorOpenTime;
 
+  
   if (garageDoorTimeElapsed > garageDoorOpenTimeLimit) {    // 15 minutes
     closeGarageDoor();
     doorOpenTime = millis();
@@ -942,10 +925,10 @@ void CheckGarageDoorStatus() {
 // ======================================================================
 void closeGarageDoor() {
   showOpenCloseGarageDoor();
-  digitalWrite(relayPin, LOW);   // Turn the LED on (Note that LOW is the voltage level
+  digitalWrite(relayPin, HIGH);   // Turn the LED on (Note that LOW is the voltage level
   // but actually the LED is on; this is because it is acive low on the ESP-01)
   delay(1000);
-  digitalWrite(relayPin, HIGH);  // Turn the LED off by making the voltage HIGH
+  digitalWrite(relayPin, LOW);  // Turn the LED off by making the voltage HIGH
   Log("Send Open/Close Garage Door Command!", "CLOSE\nDOOR"); 
 }
 
@@ -975,8 +958,7 @@ void Log(const char *message, const char *displayMessage) {
 //
 // ====================================================================
 void setup() {
-  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
-  Serial.begin(115200);
+  //Serial.begin(115200);
   
   // --------- setup OLED  --------- 
   setupOLED();
@@ -1002,7 +984,6 @@ void setup() {
   // --------- setup PCF8574  --------- 
   setupPCF8574();
 
-  
   // --------- setup OTA  --------- 
   setupOTA();
 
@@ -1056,7 +1037,7 @@ char msg_time[50];
 
     readDHT11Sensor(msg_ot, msg_oh);
 
-    CheckGarageDoorStatus();
+    CheckGarageDoorStatus(msg_door);
 
     publishTime(msg_date, msg_time);
 
