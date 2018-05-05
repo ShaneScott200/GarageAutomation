@@ -973,7 +973,7 @@ void Log(const char *message, const char *displayMessage) {
 //
 // ====================================================================
 void setup() {
-  //Serial.begin(115200);
+  Serial.begin(115200);
   
   // --------- setup OLED  --------- 
   setupOLED();
@@ -1029,8 +1029,6 @@ char msg_time[50];
   client.loop();
 
   if (programMode == 1) {
-    //Log("Entering program mode...", "PROGRAM");
-    //Serial.println("Begin Program Mode...");
     ArduinoOTA.handle();
   } else {
       if (timeStatus() != timeNotSet) {
@@ -1055,7 +1053,7 @@ char msg_time[50];
 
           readDHT11Sensor(msg_ot, msg_oh);
 
-          CheckGarageDoorStatus(msg_door);
+          //CheckGarageDoorStatus(msg_door);
 
           publishTime(msg_date, msg_time);
 
