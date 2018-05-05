@@ -1060,11 +1060,6 @@ char msg_time[50];
         }
         
         displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue);
-
-        digitalWrite(relayPin, LOW);
-        delay(1000);
-        digitalWrite(relayPin, HIGH);
-        delay(1000);
     }
  
 }
