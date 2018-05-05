@@ -53,6 +53,7 @@ byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Try to replace with DS18
 
 // ============================== OTA CONFIGURATION ===========================
 #include <ArduinoOTA.h>
+int programMode = 0;
 // ============================== END OTA CONFIGURATION =======================
 
 
@@ -132,7 +133,7 @@ bool pirMotionDetected = false;
 long lastPIRReadTime = 0;
 int sensorPIRReadInterval = 2*1000;      // Read PIR sensor every 5 seconds
 
-long lastReadTime = 0;
+ulong lastReadTime = 0;
 int sensorReadInterval = 1000;
 // ============================== END GARAGE CONFIGURATION ===========================
 
@@ -188,7 +189,6 @@ void setupDS18B20() {
 //
 // ====================================================================
 void getDeviceAddress(void) {
-  byte i;
   byte dsAddress[8];
   
   Log( "Searching for DS18B20...", NULL);
@@ -275,10 +275,11 @@ void setupWifi() {
 // Description: Used to convert IP Address to char array for printing
 //
 // =====================================================================
-char* IPtoCharArray(IPAddress  _address)
+char* IPtoCharArray(IPAddress _address)
 {
-    static char szRet[20];
-    String str = String(_address[0]);
+    char szRet[20];
+    String str = "";
+    str += String(_address[0]);
     str += ".";
     str += String(_address[1]);
     str += ".";
@@ -382,12 +383,15 @@ void setupOTA() {
   ArduinoOTA.onStart([]() {
     Log("OTA Start", NULL);
   });
+
   ArduinoOTA.onEnd([]() {
     Log("OTA End", NULL);
   });
+
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    //Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
+
   ArduinoOTA.onError([](ota_error_t error) {
     Log(strcat("Error: ", (char*)(long)error), NULL);
     if (error == OTA_AUTH_ERROR) Log("Auth Failed", NULL);
@@ -396,6 +400,7 @@ void setupOTA() {
     else if (error == OTA_RECEIVE_ERROR) Log("Receive Failed", NULL);
     else if (error == OTA_END_ERROR) Log("End Failed", NULL);
   });
+
   ArduinoOTA.begin();
   Log("OTA setup complete!", "OTA/nSETUP");
 }
@@ -434,6 +439,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
      Log("Time set", "TIME\nSET");
      
     }
+  
+  if (strcmp(topic,"garage/uploadCode")==0) {
+      if ((char)payload[0] == '1') {
+        Log ("Upload mode set", "UPLOAD");
+        programMode = 1;
+      }  
+      
+  }
 }
 
 
@@ -452,12 +465,13 @@ void reconnect() {
        Log("Attempting MQTT connection...", NULL);
       // Attempt to connect
       if (client.connect("ESP8266Client")) {
-        Log("connected", NULL);
+        Log("MQTT Connected", NULL);
         // Once connected, publish an announcement...
         client.publish("outTopic", "hello world");
         // ... and resubscribe
         client.subscribe("garage/openDoor");
         client.subscribe("time");
+        client.subscribe("garage/uploadCode");
       } else {
         Log("reconnect failed", NULL);
         delay(500);
@@ -547,7 +561,8 @@ void readDoorSensor(char *msg_door) {
   char* inTransitState = "IN TRANSIT";
   */
   PCF8574::DigitalInput di;
-  readPCF8574Sensor(di);
+  //readPCF8574Sensor(di);
+  di = pcf8574.digitalReadAll();
   int result = 0;
 
   bool closedStatus = di.p0;
@@ -672,10 +687,10 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
 // Description:
 //
 // ====================================================================
-void readPCF8574Sensor(PCF8574::DigitalInput &di) {
+/*void readPCF8574Sensor(PCF8574::DigitalInput &di) {
   PCF8574::DigitalInput returnValue = pcf8574.digitalReadAll();
   di = returnValue;
-}
+}*/
 
 
 // ============================ PUBLISH TIME DATA =======================
@@ -938,7 +953,7 @@ void closeGarageDoor() {
 //
 // ======================================================================
 void Log(const char *message, const char *displayMessage) {
-  //Serial.println(message); 
+  Serial.println(message); 
   
   //if (client.connected())
     client.publish("garage/message", message);
@@ -1002,7 +1017,7 @@ char msg_gt[50];
 char msg_oh[50];
 char msg_ot[50];
 char msg_door[50];
-char msg_motion[50];
+//char msg_motion[50];
 int ldrSensorValue;
 char msg_date[50];
 char msg_time[50];
@@ -1013,36 +1028,45 @@ char msg_time[50];
   }
   client.loop();
 
-  ArduinoOTA.handle();
+  if (programMode == 1) {
+    //Log("Entering program mode...", "PROGRAM");
+    //Serial.println("Begin Program Mode...");
+    ArduinoOTA.handle();
+  } else {
+      if (timeStatus() != timeNotSet) {
+          if (now() != prevDisplay) { //update the display only if time has changed
+            prevDisplay = now();
+          }
+        }
+        
+        if (millis() - lastReadTime > sensorReadInterval) {
+          lastReadTime = now();
+          readTime(msg_date, msg_time);
+          
+          if (pcf8574Configured == true) {
+            readDoorSensor(msg_door);
+          }
 
-  if (timeStatus() != timeNotSet) {
-    if (now() != prevDisplay) { //update the display only if time has changed
-      prevDisplay = now();
+          readLDRSensor(ldrSensorValue);
+
+          readPIRSensor();
+
+          readDS18B20Sensor(msg_gt);
+
+          readDHT11Sensor(msg_ot, msg_oh);
+
+          CheckGarageDoorStatus(msg_door);
+
+          publishTime(msg_date, msg_time);
+
+        }
+        
+        displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue);
+
+        digitalWrite(relayPin, LOW);
+        delay(1000);
+        digitalWrite(relayPin, HIGH);
+        delay(1000);
     }
-  }
-  
-  if (millis() - lastReadTime > sensorReadInterval) {
-    lastReadTime = now();
-    readTime(msg_date, msg_time);
-    
-    if (pcf8574Configured == true) {
-      readDoorSensor(msg_door);
-    }
-
-    readLDRSensor(ldrSensorValue);
-
-    readPIRSensor();
-
-    readDS18B20Sensor(msg_gt);
-
-    readDHT11Sensor(msg_ot, msg_oh);
-
-    CheckGarageDoorStatus(msg_door);
-
-    publishTime(msg_date, msg_time);
-
-  }
-  
-  displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue);
-  
+ 
 }
