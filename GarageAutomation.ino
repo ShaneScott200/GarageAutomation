@@ -518,12 +518,12 @@ void readTime(char *msg_date, char *msg_time) {
   strcat(t_msg_date, temp);
   
   // hour
-  if(hour() < 10){
+  /*if(hour() < 10){
     dtostrf(hour(), 1, 0, t_msg_time);
     //strcat(t_msg_time, "0");
-  } else {
+  } else {*/
     dtostrf(hour(), 2, 0, temp);
-  }
+  //}
   strcat(t_msg_time, temp);
   strcat(t_msg_time, ":");
   // minute
