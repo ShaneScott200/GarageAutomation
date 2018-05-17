@@ -71,7 +71,7 @@ Adafruit_SSD1306 display(OLED_RESET);
 
 // ============================= SCREEN CONFIGURATION ======================
 int screen = 0;    
-int screenMax = 5;
+int screenMax = 7;
 bool screenChanged = true;   // initially we have a new screen,  by definition 
 // defines of the screens to show
 #define TIME                  0
@@ -80,6 +80,8 @@ bool screenChanged = true;   // initially we have a new screen,  by definition
 #define OUTSIDETEMPERATURE    3
 #define DOORSTATUS            4
 #define LIGHTSTATUS           5
+#define WIFISTATUS            6
+#define MQTTSTATUS            7
 long previousLCDMillis = 0;    // for LCD screen update
 long lcdInterval = 2000;
 // ============================== END SCREEN CONFIGURATION ===========================
@@ -265,7 +267,6 @@ void setupWifi() {
   else
   {
     Log (strcat("Could not connect to ", ssid), NULL);
-
   }
 
 }
@@ -713,7 +714,7 @@ void publishTime(char msg_date[], char msg_time[]) {
 // Method that is called to display the data on the OLED
 // 
 // ===================================================================
-void displayScreen(const char *msg_gt, const char* msg_oh, const char* msg_ot, const char* msg_door, const int ldrSensorValue) {
+void displayScreen(const char *msg_gt, const char* msg_oh, const char* msg_ot, const char* msg_door, const int ldrSensorValue, const char* msg_wifi, const char* msg_mqtt) {
   unsigned long currentLCDMillis = millis();
   
   // MUST WE SWITCH SCREEN?
@@ -748,6 +749,12 @@ void displayScreen(const char *msg_gt, const char* msg_oh, const char* msg_ot, c
       break;
     case TIME:
       showTime();
+      break;
+    case WIFISTATUS:
+      showWifiStatus(msg_wifi);
+      break;
+    case MQTTSTATUS:
+      showMQTTStatus(msg_mqtt);
       break;
     default:
       // cannot happen -> showError() ?
@@ -891,6 +898,40 @@ void showTime()
   display.display();
 }
 
+
+// ============================ SHOW WIFI STATUS DISPLAY ===============
+//
+// Description:
+//
+// ===========================================================================
+void showWifiStatus(const char *msg_wifi)
+{
+  clearDisplay();
+       
+  display.println("WIFI");
+  display.println(msg_wifi);
+
+  display.display();
+}
+
+
+
+// ============================ SHOW MQTT STATUS DISPLAY ===============
+//
+// Description:
+//
+// ===========================================================================
+void showMQTTStatus(const char *msg_mqtt)
+{
+  clearDisplay();
+       
+  display.println("MQTT");
+  display.println(msg_mqtt);
+
+  display.display();
+}
+
+
 // ============================ SHOW OPEN / CLOSE GARAGE DOOR DISPLAY ================
 //
 // Description:
@@ -1021,12 +1062,23 @@ char msg_door[50];
 int ldrSensorValue;
 char msg_date[50];
 char msg_time[50];
+char msg_wifi[50];
+char msg_mqtt[50];
 
 
   if (!client.connected()) {
     reconnect();
+    strcpy(msg_mqtt, "DISCONNECTED");
+  } else {
+    strcpy(msg_mqtt, "CONNECTED");
   }
   client.loop();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    strcpy(msg_wifi, "DISCONNECTED");
+  } else {
+    strcpy(msg_wifi, "CONNECTED");
+  }
 
   if (programMode == 1) {
     ArduinoOTA.handle();
@@ -1059,7 +1111,7 @@ char msg_time[50];
 
         }
         
-        displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue);
+        displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue, msg_wifi, msg_mqtt);
     }
  
 }
