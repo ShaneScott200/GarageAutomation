@@ -115,7 +115,7 @@ double DS18B20_temp = 0;
 // ============================== MQTT CONFIGURATION =======================
 WiFiClient espClient;
 PubSubClient client(espClient);
-const char* mqtt_server = "192.168.0.101";
+const char* mqtt_server = "192.168.0.200";
 // ============================== END MQTT CONFIGURATION ===========================
 
 
@@ -1014,7 +1014,7 @@ void Log(const char *message, const char *displayMessage) {
 //
 // ====================================================================
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   
   // --------- setup OLED  --------- 
   setupOLED();
