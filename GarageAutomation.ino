@@ -912,10 +912,12 @@ void showTime()
 void showWifiStatus(const char *msg_wifi)
 {
   clearDisplay();
-       
-  display.println("WIFI");
+  
+  display.println("WIFI IP");
+  display.setTextSize(1);
   display.println(msg_wifi);
-
+  display.println(WiFi.localIP().toString().c_str());
+  
   display.display();
 }
 
@@ -929,8 +931,11 @@ void showMQTTStatus(const char *msg_mqtt)
 {
   clearDisplay();
        
-  display.println("MQTT");
+  display.println("MQTT SVR");
+  display.setTextSize(1);
   display.println(msg_mqtt);
+  display.println(mqtt_server);
+  
 
   display.display();
 }
@@ -1095,7 +1100,10 @@ char msg_mqtt[50];
 
   if (!client.connected() && wifiConnected) {
     reconnect(msg_mqtt);
+  } else {
+    strcpy(msg_mqtt, "CONNECTED");
   }
+  
   client.loop();
 
   if (programMode == 1) {
