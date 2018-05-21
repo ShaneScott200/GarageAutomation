@@ -47,6 +47,7 @@
 // Update these with values suitable for your network.
 const char* ssid = "RedBear";
 const char* password = "VLgregRy4h";
+//const char* password = "dummy";
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Try to replace with DS18B20 MAC
 // ============================== END WIFI CONFIGURATION =========================
 
@@ -457,7 +458,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 // Description:
 //
 // ====================================================================
-void reconnect() {
+void reconnect(char* msg_mqtt) {
   // Loop until we're reconnected
     // Try to connect 10 times with 500 msec inbetween each attempt
   for (int i =0; i < 10; i++)
@@ -473,9 +474,12 @@ void reconnect() {
         client.subscribe("garage/openDoor");
         client.subscribe("time");
         client.subscribe("garage/uploadCode");
+        strcpy(msg_mqtt, "CONNECTED");
       } else {
         Log("reconnect failed", NULL);
-        delay(500);
+        strcpy(msg_mqtt, "MQTT FAIL");
+        showErrorStatus(msg_mqtt);
+        delay(250);
       }
     } 
   }
@@ -757,6 +761,7 @@ void displayScreen(const char *msg_gt, const char* msg_oh, const char* msg_ot, c
       showMQTTStatus(msg_mqtt);
       break;
     default:
+      showErrorStatus(NULL);
       // cannot happen -> showError() ?
       break;
     }
@@ -915,7 +920,6 @@ void showWifiStatus(const char *msg_wifi)
 }
 
 
-
 // ============================ SHOW MQTT STATUS DISPLAY ===============
 //
 // Description:
@@ -927,6 +931,21 @@ void showMQTTStatus(const char *msg_mqtt)
        
   display.println("MQTT");
   display.println(msg_mqtt);
+
+  display.display();
+}
+
+
+// ============================ SHOW ERROR STATUS DISPLAY ===============
+//
+// Description:
+//
+// ===========================================================================
+void showErrorStatus(const char *msg_error)
+{
+  clearDisplay();
+       
+  display.println(msg_error);
 
   display.display();
 }
@@ -1053,7 +1072,7 @@ void setup() {
 //
 // ====================================================================
 void loop() {
-
+bool wifiConnected = false;
 char msg_gt[50];
 char msg_oh[50];
 char msg_ot[50];
@@ -1065,20 +1084,19 @@ char msg_time[50];
 char msg_wifi[50];
 char msg_mqtt[50];
 
-
-  if (!client.connected()) {
-    reconnect();
-    strcpy(msg_mqtt, "DISCONNECTED");
-  } else {
-    strcpy(msg_mqtt, "CONNECTED");
-  }
-  client.loop();
-
   if (WiFi.status() != WL_CONNECTED) {
     strcpy(msg_wifi, "DISCONNECTED");
+    strcpy(msg_mqtt, "DISCONNECTED");
+    wifiConnected = false;
   } else {
     strcpy(msg_wifi, "CONNECTED");
+    wifiConnected = true;
   }
+
+  if (!client.connected() && wifiConnected) {
+    reconnect(msg_mqtt);
+  }
+  client.loop();
 
   if (programMode == 1) {
     ArduinoOTA.handle();
