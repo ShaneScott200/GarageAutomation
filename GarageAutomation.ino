@@ -247,13 +247,13 @@ void setupWifi() {
   WiFi.mode(WIFI_STA); // <<< Station
   WiFi.begin(ssid, password);
   char i_msg[2];
-  // Try to connect 10 times with 500 msec inbetween each attempt
-  for (int i =0; i < 10; i++)
+  // Try to connect 3 times with 250 msec in between each attempt
+  for (int i =0; i < 3; i++)
   {
     if (WiFi.status() != WL_CONNECTED) {
       dtostrf(i, 2, 0, i_msg);    // dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
       Log (strcat("Could not connect.  Attempt # ", i_msg), NULL);
-      delay(500);
+      delay(250);
     } else {
       connected = true;
       continue;
@@ -1093,6 +1093,7 @@ char msg_mqtt[50];
     strcpy(msg_wifi, "DISCONNECTED");
     strcpy(msg_mqtt, "DISCONNECTED");
     wifiConnected = false;
+    setupWifi();
   } else {
     strcpy(msg_wifi, "CONNECTED");
     wifiConnected = true;
