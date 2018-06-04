@@ -43,7 +43,7 @@
 */
 
 ulong lastReadTime = 0;
-int sensorReadInterval = 1000;
+int sensorReadInterval = 2000;
 
 // ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
@@ -88,7 +88,7 @@ bool screenChanged = true;   // initially we have a new screen,  by definition
 #define WIFISTATUS            6
 #define MQTTSTATUS            7
 long previousLCDMillis = 0;    // for LCD screen update
-long lcdInterval = 2000;
+long lcdInterval = 1000;
 // ============================== END SCREEN CONFIGURATION ===========================
 
 
@@ -1071,7 +1071,7 @@ bool wifiConnected = false;
 char msg_gt[50];
 char msg_oh[50];
 char msg_ot[50];
-char msg_door[50];
+char msg_door[50] = "0";
 //char msg_motion[50];
 int ldrSensorValue;
 char msg_date[50];
@@ -1106,24 +1106,41 @@ char msg_mqtt[50];
           }
         }*/
         
-        if (millis() - lastReadTime > sensorReadInterval) {
-          lastReadTime = millis();
+        //if (millis() - lastReadTime > sensorReadInterval) {
+          //lastReadTime = millis();
           readTime(msg_date, msg_time);
-          
+          Serial.print("readTime: ");
+          Serial.println(millis() - lastReadTime);
+
           if (pcf8574Configured == true) {
             readDoorSensor(msg_door);
           }
+          Serial.print("readDoorSensor: ");
+          Serial.println(millis() - lastReadTime);
 
           readLDRSensor(ldrSensorValue);
+          Serial.print("readLDRSensor: ");
+          Serial.println(millis() - lastReadTime);
 
           readPIRSensor();
-
+          Serial.print("readPIRSensor: ");
+          Serial.println(millis() - lastReadTime);
+        
+        if (millis() - lastReadTime > sensorReadInterval) {
+          lastReadTime = millis();
+          
           readDS18B20Sensor(msg_gt);
+          Serial.print("readDS18B20Sensor: ");
+          Serial.println(millis() - lastReadTime);
 
           readDHT11Sensor(msg_ot, msg_oh);
-
+          Serial.print("readDHT11Sensor: ");
+          Serial.println(millis() - lastReadTime);
+          
           publishTime(msg_date, msg_time);
-
+          Serial.print("publishTime: ");
+          Serial.println(millis() - lastReadTime);
+          Serial.println("\n");
         }
         
         displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue, msg_wifi, msg_mqtt);
