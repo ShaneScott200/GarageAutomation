@@ -41,6 +41,10 @@
 
   dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
 */
+
+ulong lastReadTime = 0;
+int sensorReadInterval = 1000;
+
 // ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -90,13 +94,13 @@ long lcdInterval = 2000;
 
 // ============================== DHT11 CONFIGURATION ============================== 
 #include <DHT.h>
-#define DHTTYPE  DHT21
+#define DHTTYPE  DHT11  // was DHT21
 int dhtPin=D7;
 DHT dht(dhtPin, DHTTYPE);
 float t = 0;
 float h = 0;
 int failedCount = 0;
-int failedCountLimit = 10;
+//int failedCountLimit = 10;
 // ============================== END DHT11 CONFIGURATION ===========================
 
 
@@ -116,6 +120,7 @@ double DS18B20_temp = 0;
 // ============================== MQTT CONFIGURATION =======================
 WiFiClient espClient;
 PubSubClient client(espClient);
+const char* clientID = "garage";
 const char* mqtt_server = "192.168.0.200";
 // ============================== END MQTT CONFIGURATION ===========================
 
@@ -136,8 +141,6 @@ bool pirMotionDetected = false;
 long lastPIRReadTime = 0;
 int sensorPIRReadInterval = 2*1000;      // Read PIR sensor every 5 seconds
 
-ulong lastReadTime = 0;
-int sensorReadInterval = 1000;
 // ============================== END GARAGE CONFIGURATION ===========================
 
 
@@ -466,7 +469,7 @@ void reconnect(char* msg_mqtt) {
     if (!client.connected()) {
        Log("Attempting MQTT connection...", NULL);
       // Attempt to connect
-      if (client.connect("ESP8266Client")) {
+      if (client.connect(clientID)) {
         Log("MQTT Connected", NULL);
         // Once connected, publish an announcement...
         client.publish("outTopic", "hello world");
@@ -523,10 +526,6 @@ void readTime(char *msg_date, char *msg_time) {
   strcat(t_msg_date, temp);
   
   // hour
-  /*if(hour() < 10){
-    dtostrf(hour(), 1, 0, t_msg_time);
-    //strcat(t_msg_time, "0");
-  } else {*/
     dtostrf(hour(), 2, 0, temp);
   //}
   strcat(t_msg_time, temp);
@@ -561,12 +560,8 @@ void readTime(char *msg_date, char *msg_time) {
 // ====================================================================
 void readDoorSensor(char *msg_door) {
 
-  /*char* openState = "OPEN";
-  char* closedState = "CLOSED";
-  char* inTransitState = "IN TRANSIT";
-  */
   PCF8574::DigitalInput di;
-  //readPCF8574Sensor(di);
+  // readPCF8574Sensor() code was here.
   di = pcf8574.digitalReadAll();
   int result = 0;
 
@@ -578,7 +573,6 @@ void readDoorSensor(char *msg_door) {
       case -1:  // OPEN
           openStatus = true;
           strcpy(msg_door, "OPEN");
-          //msg_door = openState;
           pcf8574.digitalWrite(P6,HIGH);  // Set OPEN HIGH
         break;
       case 0:   // IN TRANSIT
@@ -587,19 +581,15 @@ void readDoorSensor(char *msg_door) {
           pcf8574.digitalWrite(P6,LOW);   // Set OPEN LOW
           pcf8574.digitalWrite(P7,LOW);   // Set CLOSED LOW
           strcpy(msg_door, "IN TRANSIT");
-          //msg_door = inTransitState;
         break;
       case 1:   // CLOSED
           closedStatus = true;
           strcpy(msg_door, "CLOSED");
-          //msg_door = closedState;
           pcf8574.digitalWrite(P7,HIGH);   // Set CLOSED HIGH
         break;
   }
-  //Log (strcat("Door Status is: ", msg_door), NULL);
   
   client.publish("garage/doorStatus", msg_door);
-
 }
 
 // ============================ READ LDR SENSOR ======================
@@ -665,7 +655,7 @@ void readDS18B20Sensor(char *msg_gt) {
 void readDHT11Sensor(char *msg_ot, char *msg_oh) {
     float prev_t = t;
     float prev_h = h;
-    if (failedCount < failedCountLimit){
+    //if (failedCount < failedCountLimit){
       t = dht.readTemperature();
       h = dht.readHumidity();
       // Check if any reads failed and exit early (to try again).
@@ -673,11 +663,11 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
         Log("Failed to read from DHT sensor!",NULL);
         t = prev_t;
         h = prev_h;
-        failedCount++;
-      } else {
-        failedCount = 0;
+        //failedCount++;
+      //} else {
+      //  failedCount = 0;
       }
-    }
+    //}
     
     dtostrf(t,4,1,msg_ot);
     client.publish("garage/outsidetemp", msg_ot);
@@ -1110,14 +1100,14 @@ char msg_mqtt[50];
   if (programMode == 1) {
     ArduinoOTA.handle();
   } else {
-      if (timeStatus() != timeNotSet) {
+      /*if (timeStatus() != timeNotSet) {
           if (now() != prevDisplay) { //update the display only if time has changed
             prevDisplay = now();
           }
-        }
+        }*/
         
         if (millis() - lastReadTime > sensorReadInterval) {
-          lastReadTime = now();
+          lastReadTime = millis();
           readTime(msg_date, msg_time);
           
           if (pcf8574Configured == true) {
@@ -1131,8 +1121,6 @@ char msg_mqtt[50];
           readDS18B20Sensor(msg_gt);
 
           readDHT11Sensor(msg_ot, msg_oh);
-
-          //CheckGarageDoorStatus(msg_door);
 
           publishTime(msg_date, msg_time);
 
