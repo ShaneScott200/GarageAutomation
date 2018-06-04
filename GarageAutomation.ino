@@ -94,7 +94,7 @@ long lcdInterval = 1000;
 
 // ============================== DHT11 CONFIGURATION ============================== 
 #include <DHT.h>
-#define DHTTYPE  DHT11  // was DHT21
+#define DHTTYPE  DHT21
 int dhtPin=D7;
 DHT dht(dhtPin, DHTTYPE);
 float t = 0;
@@ -1100,35 +1100,34 @@ char msg_mqtt[50];
   if (programMode == 1) {
     ArduinoOTA.handle();
   } else {
-      /*if (timeStatus() != timeNotSet) {
-          if (now() != prevDisplay) { //update the display only if time has changed
-            prevDisplay = now();
-          }
-        }*/
-        
-        //if (millis() - lastReadTime > sensorReadInterval) {
-          //lastReadTime = millis();
-          readTime(msg_date, msg_time);
-          Serial.print("readTime: ");
-          Serial.println(millis() - lastReadTime);
+        // These items take very little time to execute (~1-3 sec) but it would be good to measure them more often
+        readTime(msg_date, msg_time);
+        Serial.print("readTime: ");
+        Serial.println(millis() - lastReadTime);
 
-          if (pcf8574Configured == true) {
-            readDoorSensor(msg_door);
-          }
-          Serial.print("readDoorSensor: ");
-          Serial.println(millis() - lastReadTime);
+        if (pcf8574Configured == true) {
+          readDoorSensor(msg_door);
+        }
+        Serial.print("readDoorSensor: ");
+        Serial.println(millis() - lastReadTime);
 
-          readLDRSensor(ldrSensorValue);
-          Serial.print("readLDRSensor: ");
-          Serial.println(millis() - lastReadTime);
+        readLDRSensor(ldrSensorValue);
+        Serial.print("readLDRSensor: ");
+        Serial.println(millis() - lastReadTime);
 
-          readPIRSensor();
-          Serial.print("readPIRSensor: ");
-          Serial.println(millis() - lastReadTime);
-        
+        readPIRSensor();
+        Serial.print("readPIRSensor: ");
+        Serial.println(millis() - lastReadTime);
+      
+        publishTime(msg_date, msg_time);
+        Serial.print("publishTime: ");
+        Serial.println(millis() - lastReadTime);
+        Serial.println("\n");
+
+        // These items take a long time to execute (250-750 msec) but the values don't change often so these can be read slower.
         if (millis() - lastReadTime > sensorReadInterval) {
           lastReadTime = millis();
-          
+
           readDS18B20Sensor(msg_gt);
           Serial.print("readDS18B20Sensor: ");
           Serial.println(millis() - lastReadTime);
@@ -1136,11 +1135,7 @@ char msg_mqtt[50];
           readDHT11Sensor(msg_ot, msg_oh);
           Serial.print("readDHT11Sensor: ");
           Serial.println(millis() - lastReadTime);
-          
-          publishTime(msg_date, msg_time);
-          Serial.print("publishTime: ");
-          Serial.println(millis() - lastReadTime);
-          Serial.println("\n");
+
         }
         
         displayScreen(msg_gt, msg_oh, msg_ot, msg_door, ldrSensorValue, msg_wifi, msg_mqtt);
