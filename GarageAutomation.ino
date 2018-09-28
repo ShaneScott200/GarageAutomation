@@ -49,8 +49,8 @@ int sensorReadInterval = 2000;
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 // Update these with values suitable for your network.
-const char* ssid = "RedBear";
-const char* password = "VLgregRy4h";
+const char* ssid = "xxx";
+const char* password = "xxx";
 //const char* password = "dummy";
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Try to replace with DS18B20 MAC
 // ============================== END WIFI CONFIGURATION =========================
