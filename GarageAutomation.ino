@@ -616,9 +616,9 @@ void readLDRSensor(int &ldrSensorValue, bool connected) {
       }
     }
 
+    char msg_light[50];
+    dtostrf(ldrSensorValue,4,1,msg_light);
     if (connected) {
-      char msg_light[50];
-      dtostrf(ldrSensorValue,4,1,msg_light);
       client.publish("garage/lightlevel", msg_light);
     }
 }
@@ -657,8 +657,8 @@ void readDS18B20Sensor(char *msg_gt, bool connected) {
     sensors.requestTemperatures();  
     DS18B20_temp = sensors.getTempCByIndex(0);
 
+    dtostrf(DS18B20_temp,4,1,msg_gt);
     if (connected) {
-      dtostrf(DS18B20_temp,4,1,msg_gt);
       client.publish("garage/garagetemp", msg_gt);
     }
     
@@ -686,11 +686,11 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh, bool connected) {
       }
     //}
 
+    dtostrf(t,4,1,msg_ot);
+    dtostrf(h,4,1,msg_oh);
     if (connected) {
-      dtostrf(t,4,1,msg_ot);
       client.publish("garage/outsidetemp", msg_ot);
-    
-      dtostrf(h,4,1,msg_oh);
+         
       client.publish("garage/outsidehumidity", msg_oh);
     }
 }
@@ -712,12 +712,13 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh, bool connected) {
 //
 // ====================================================================
 void publishTime(char msg_date[], char msg_time[], bool connected) {
-  if (connected) {
-    char date_time [50] = "2018";
-    strcpy(date_time, msg_date);
-    strcat(date_time, "-");
-    strcat(date_time, msg_time);
-    
+
+   char date_time [50] = "2018";
+   strcpy(date_time, msg_date);
+   strcat(date_time, "-");
+   strcat(date_time, msg_time);
+   
+   if (connected) {   
     client.publish("garage/time", date_time);
   }
 }
