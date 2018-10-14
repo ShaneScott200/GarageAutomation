@@ -44,6 +44,8 @@
 
 ulong lastReadTime = 0;
 int sensorReadInterval = 2000;
+ulong lastWifiConnectedTime = 0;
+int WifiConnectInterval = 10000;
 
 // ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
@@ -51,7 +53,6 @@ int sensorReadInterval = 2000;
 // Update these with values suitable for your network.
 const char* ssid = "xxx";
 const char* password = "xxx";
-//const char* password = "dummy";
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Try to replace with DS18B20 MAC
 // ============================== END WIFI CONFIGURATION =========================
 
@@ -75,7 +76,7 @@ Adafruit_SSD1306 display(OLED_RESET);
 
 
 // ============================= SCREEN CONFIGURATION ======================
-int screen = 0;    
+int screen = 7;    
 int screenMax = 7;
 bool screenChanged = true;   // initially we have a new screen,  by definition 
 // defines of the screens to show
@@ -242,7 +243,7 @@ void setupPIRSensor() {
 // Description:
 //
 // ====================================================================
-void setupWifi() {
+bool setupWifi() {
   bool connected = false;
   
   // We start by connecting to a WiFi network
@@ -272,7 +273,8 @@ void setupWifi() {
   {
     Log (strcat("Could not connect to ", ssid), NULL);
   }
-
+  
+  return connected;
 }
 
 // ========================= IPtoCharArray =======================
@@ -461,7 +463,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 // Description:
 //
 // ====================================================================
-void reconnect(char* msg_mqtt) {
+bool reconnect(char* msg_mqtt) {
   // Loop until we're reconnected
     // Try to connect 10 times with 500 msec inbetween each attempt
   for (int i =0; i < 10; i++)
@@ -486,7 +488,7 @@ void reconnect(char* msg_mqtt) {
       }
     } 
   }
-
+  return client.connected();
 }
 
 
@@ -558,7 +560,7 @@ void readTime(char *msg_date, char *msg_time) {
 // Description:
 //
 // ====================================================================
-void readDoorSensor(char *msg_door) {
+void readDoorSensor(char *msg_door, bool connected) {
 
   PCF8574::DigitalInput di;
   // readPCF8574Sensor() code was here.
@@ -589,7 +591,9 @@ void readDoorSensor(char *msg_door) {
         break;
   }
   
-  client.publish("garage/doorStatus", msg_door);
+  if (connected) {
+    client.publish("garage/doorStatus", msg_door);
+  }
 }
 
 // ============================ READ LDR SENSOR ======================
@@ -597,20 +601,26 @@ void readDoorSensor(char *msg_door) {
 // Description:
 //
 // ====================================================================
-void readLDRSensor(int &ldrSensorValue) {
+void readLDRSensor(int &ldrSensorValue, bool connected) {
 
     ldrSensorValue = analogRead(ldrPin);
     if (ldrSensorValue > lightOnLimit) {
       lightStatus = true;
-      client.publish("garage/lightStatus", "ON");
+      if (connected) {
+        client.publish("garage/lightStatus", "ON");
+      }
     } else {
       lightStatus = false;
-      client.publish("garage/lightStatus", "OFF");
+      if (connected) {
+        client.publish("garage/lightStatus", "OFF");
+      }
     }
 
-    char msg_light[50];
-    dtostrf(ldrSensorValue,4,1,msg_light);
-    client.publish("garage/lightlevel", msg_light);
+    if (connected) {
+      char msg_light[50];
+      dtostrf(ldrSensorValue,4,1,msg_light);
+      client.publish("garage/lightlevel", msg_light);
+    }
 }
 
 // ============================ READ PIR SENSOR ======================
@@ -618,16 +628,20 @@ void readLDRSensor(int &ldrSensorValue) {
 // Description:
 //
 // ====================================================================
-void readPIRSensor() {
+void readPIRSensor(bool connected) {
    if ((millis() - lastPIRReadTime) > sensorPIRReadInterval) {
       lastPIRReadTime = millis();
       pirMotionDetected = digitalRead(pirPin);
 
       if (pirMotionDetected == HIGH) {
-        client.publish("garage/motionActive", "ON");
+        if (connected) {
+          client.publish("garage/motionActive", "ON");
+        }
         pcf8574.digitalWrite(P5,HIGH);
       } else {
-        client.publish("garage/motionActive", "OFF");
+        if (connected) {
+          client.publish("garage/motionActive", "OFF");
+        }
         pcf8574.digitalWrite(P5,LOW);
       }
    }
@@ -638,13 +652,16 @@ void readPIRSensor() {
 // Description:
 //
 // ====================================================================
-void readDS18B20Sensor(char *msg_gt) {
+void readDS18B20Sensor(char *msg_gt, bool connected) {
     // read DS18B20 temperature sensor at index 0 (first sensor)
     sensors.requestTemperatures();  
     DS18B20_temp = sensors.getTempCByIndex(0);
 
-    dtostrf(DS18B20_temp,4,1,msg_gt);
-    client.publish("garage/garagetemp", msg_gt);
+    if (connected) {
+      dtostrf(DS18B20_temp,4,1,msg_gt);
+      client.publish("garage/garagetemp", msg_gt);
+    }
+    
 }
 
 // ============================ READ DHT SENSOR =======================
@@ -652,7 +669,7 @@ void readDS18B20Sensor(char *msg_gt) {
 // Description:
 //
 // ====================================================================
-void readDHT11Sensor(char *msg_ot, char *msg_oh) {
+void readDHT11Sensor(char *msg_ot, char *msg_oh, bool connected) {
     float prev_t = t;
     float prev_h = h;
     //if (failedCount < failedCountLimit){
@@ -668,13 +685,14 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
       //  failedCount = 0;
       }
     //}
-    
-    dtostrf(t,4,1,msg_ot);
-    client.publish("garage/outsidetemp", msg_ot);
-    
-    dtostrf(h,4,1,msg_oh);
-    client.publish("garage/outsidehumidity", msg_oh);
 
+    if (connected) {
+      dtostrf(t,4,1,msg_ot);
+      client.publish("garage/outsidetemp", msg_ot);
+    
+      dtostrf(h,4,1,msg_oh);
+      client.publish("garage/outsidehumidity", msg_oh);
+    }
 }
 
 // ============================ READ PCF8574 SENSOR =======================
@@ -693,13 +711,15 @@ void readDHT11Sensor(char *msg_ot, char *msg_oh) {
 // Description:
 //
 // ====================================================================
-void publishTime(char msg_date[], char msg_time[]) {
-  char date_time [50] = "2018";
-  strcpy(date_time, msg_date);
-  strcat(date_time, "-");
-  strcat(date_time, msg_time);
-  
-  client.publish("garage/time", date_time);
+void publishTime(char msg_date[], char msg_time[], bool connected) {
+  if (connected) {
+    char date_time [50] = "2018";
+    strcpy(date_time, msg_date);
+    strcat(date_time, "-");
+    strcat(date_time, msg_time);
+    
+    client.publish("garage/time", date_time);
+  }
 }
 
 
@@ -1010,8 +1030,9 @@ void closeGarageDoor() {
 void Log(const char *message, const char *displayMessage) {
   Serial.println(message); 
   
-  //if (client.connected())
+  if (!client.connected()) {
     client.publish("garage/message", message);
+  }
   
   // could use strncpy to copy 10 characters for each line to avoid overflow on OLED
   if (sizeof(displayMessage) >0) {    // or use strlen()
@@ -1068,6 +1089,7 @@ void setup() {
 // ====================================================================
 void loop() {
 bool wifiConnected = false;
+bool mqttConnected = false;
 char msg_gt[50];
 char msg_oh[50];
 char msg_ot[50];
@@ -1079,20 +1101,25 @@ char msg_time[50];
 char msg_wifi[50];
 char msg_mqtt[50];
 
-  if (WiFi.status() != WL_CONNECTED) {
-    strcpy(msg_wifi, "DISCONNECTED");
-    strcpy(msg_mqtt, "DISCONNECTED");
-    wifiConnected = false;
-    setupWifi();
-  } else {
+  if ( (WiFi.status() != WL_CONNECTED) && (millis() - lastWifiConnectedTime > WifiConnectInterval) ) {
+    wifiConnected = setupWifi();
+  lastWifiConnectedTime = millis();
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
     strcpy(msg_wifi, "CONNECTED");
-    wifiConnected = true;
+  } else {
+    strcpy(msg_wifi, "DISCONNECTED"); 
   }
 
   if (!client.connected() && wifiConnected) {
-    reconnect(msg_mqtt);
-  } else {
+    mqttConnected = reconnect(msg_mqtt);
+  }
+  
+  if (client.connected()) {
     strcpy(msg_mqtt, "CONNECTED");
+  } else {
+    strcpy(msg_mqtt, "DISCONNECTED"); 
   }
   
   client.loop();
@@ -1102,39 +1129,24 @@ char msg_mqtt[50];
   } else {
         // These items take very little time to execute (~1-3 sec) but it would be good to measure them more often
         readTime(msg_date, msg_time);
-        Serial.print("readTime: ");
-        Serial.println(millis() - lastReadTime);
 
         if (pcf8574Configured == true) {
-          readDoorSensor(msg_door);
+          readDoorSensor(msg_door, mqttConnected);
         }
-        Serial.print("readDoorSensor: ");
-        Serial.println(millis() - lastReadTime);
 
-        readLDRSensor(ldrSensorValue);
-        Serial.print("readLDRSensor: ");
-        Serial.println(millis() - lastReadTime);
+        readLDRSensor(ldrSensorValue, mqttConnected);
 
-        readPIRSensor();
-        Serial.print("readPIRSensor: ");
-        Serial.println(millis() - lastReadTime);
+        readPIRSensor(mqttConnected);
       
-        publishTime(msg_date, msg_time);
-        Serial.print("publishTime: ");
-        Serial.println(millis() - lastReadTime);
-        Serial.println("\n");
+        publishTime(msg_date, msg_time, mqttConnected);
 
         // These items take a long time to execute (250-750 msec) but the values don't change often so these can be read slower.
         if (millis() - lastReadTime > sensorReadInterval) {
           lastReadTime = millis();
 
-          readDS18B20Sensor(msg_gt);
-          Serial.print("readDS18B20Sensor: ");
-          Serial.println(millis() - lastReadTime);
+          readDS18B20Sensor(msg_gt, mqttConnected);
 
-          readDHT11Sensor(msg_ot, msg_oh);
-          Serial.print("readDHT11Sensor: ");
-          Serial.println(millis() - lastReadTime);
+          readDHT11Sensor(msg_ot, msg_oh, mqttConnected);
 
         }
         
