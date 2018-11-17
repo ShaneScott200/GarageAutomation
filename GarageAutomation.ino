@@ -50,9 +50,11 @@ int WifiConnectInterval = 10000;
 // ============================== WIFI CONFIGURATION ===========================
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include "Common.h"
 // Update these with values suitable for your network.
-const char* ssid = "xxx";
-const char* password = "xxx";
+// include "Common.h" file with the following definitions:
+//char ssid[] = "*****";  //  your network SSID (name)
+//char pass[] = "*****";       // your network password
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // Try to replace with DS18B20 MAC
 // ============================== END WIFI CONFIGURATION =========================
 
@@ -247,31 +249,25 @@ bool setupWifi() {
   bool connected = false;
   
   // We start by connecting to a WiFi network
-  Log (strcat("Connecting to ", ssid), NULL);
-  WiFi.mode(WIFI_STA); // <<< Station
-  WiFi.begin(ssid, password);
-  char i_msg[2];
-  // Try to connect 3 times with 250 msec in between each attempt
-  for (int i =0; i < 3; i++)
-  {
-    if (WiFi.status() != WL_CONNECTED) {
-      dtostrf(i, 2, 0, i_msg);    // dtostrf(floatVar, minStringWidthIncDecimalPoint, numVarsAfterDecimal, charBuf);
-      Log (strcat("Could not connect.  Attempt # ", i_msg), NULL);
-      delay(250);
-    } else {
-      connected = true;
-      continue;
-    }
-  }
+  Serial.print("Connecting to "); Serial.print(ssid); Serial.println("!");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, pass);
 
-  if (connected)
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  
+  if (WiFi.status() != WL_CONNECTED)
   {
-    char *ip_address = IPtoCharArray(WiFi.localIP());
-    Log (strcat("WiFi connected! IP address: ", ip_address), NULL);
+    Log (strcat("Could not connect to ", ssid), NULL);
   }
   else
   {
-    Log (strcat("Could not connect to ", ssid), NULL);
+    char *ip_address = IPtoCharArray(WiFi.localIP());
+    Log (strcat("WiFi connected! IP address: ", ip_address), NULL);
+    connected = true;
   }
   
   return connected;
@@ -1050,7 +1046,7 @@ void Log(const char *message, const char *displayMessage) {
 //
 // ====================================================================
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   
   // --------- setup OLED  --------- 
   setupOLED();
