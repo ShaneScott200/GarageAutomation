@@ -43,7 +43,7 @@
 */
 
 ulong lastReadTime = 0;
-int sensorReadInterval = 2000;
+int sensorReadInterval = 10000;
 ulong lastWifiConnectedTime = 0;
 int WifiConnectInterval = 10000;
 
@@ -51,6 +51,17 @@ int WifiConnectInterval = 10000;
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include "Common.h"
+
+/* WiFi states
+ * WL_CONNECTED: assigned when connected to a WiFi network;
+ * WL_NO_SHIELD: assigned when no WiFi shield is present;
+ * WL_IDLE_STATUS: it is a temporary status assigned when WiFi.begin() is called and remains active until the number of attempts expires (resulting in WL_CONNECT_FAILED) or a connection is established (resulting in WL_CONNECTED);
+ * WL_NO_SSID_AVAIL: assigned when no SSID are available;
+ * WL_SCAN_COMPLETED: assigned when the scan networks is completed;
+ * WL_CONNECT_FAILED: assigned when the connection fails for all the attempts;
+ * WL_CONNECTION_LOST: assigned when the connection is lost;
+ * WL_DISCONNECTED: assigned when disconnected from a network;
+ */
 // Update these with values suitable for your network.
 // include "Common.h" file with the following definitions:
 //char ssid[] = "*****";  //  your network SSID (name)
@@ -270,7 +281,7 @@ bool setupWifi() {
     connected = true;
   }
   
-  return connected;
+  return true;
 }
 
 // ========================= IPtoCharArray =======================
@@ -313,6 +324,7 @@ void setupGarageSensors() {
 void setupMQTT() {
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+
   Log("MQTT setup complete!", "MQTT\nSETUP");
 }
 
@@ -459,32 +471,30 @@ void callback(char* topic, byte* payload, unsigned int length) {
 // Description:
 //
 // ====================================================================
-bool reconnect(char* msg_mqtt) {
-  // Loop until we're reconnected
-    // Try to connect 10 times with 500 msec inbetween each attempt
+bool reconnectMQTT() {
+  setupMQTT();
+
+   // Try to connect 10 times with 250 msec in between each attempt
   for (int i =0; i < 10; i++)
   {
     if (!client.connected()) {
        Log("Attempting MQTT connection...", NULL);
       // Attempt to connect
       if (client.connect(clientID)) {
-        Log("MQTT Connected", NULL);
         // Once connected, publish an announcement...
         client.publish("outTopic", "hello world");
         // ... and resubscribe
         client.subscribe("garage/openDoor");
         client.subscribe("time");
         client.subscribe("garage/uploadCode");
-        strcpy(msg_mqtt, "CONNECTED");
+        Log("MQTT Connected", NULL);
+        return true;
       } else {
         Log("reconnect failed", NULL);
-        strcpy(msg_mqtt, "MQTT FAIL");
-        showErrorStatus(msg_mqtt);
-        delay(250);
       }
     } 
   }
-  return client.connected();
+  return false;
 }
 
 
@@ -1061,7 +1071,8 @@ void setup() {
   setupWifi();
 
   // --------- setup MQTT  --------- 
-  setupMQTT();
+  //setupMQTT();
+  reconnectMQTT();
   
   // --------- setup DHT  --------- 
   setupDHT();
@@ -1091,7 +1102,6 @@ char msg_gt[50];
 char msg_oh[50];
 char msg_ot[50];
 char msg_door[50] = "0";
-//char msg_motion[50];
 int ldrSensorValue;
 char msg_date[50];
 char msg_time[50];
@@ -1100,31 +1110,34 @@ char msg_mqtt[50];
 
   if ( (WiFi.status() != WL_CONNECTED) && (millis() - lastWifiConnectedTime > WifiConnectInterval) ) {
     wifiConnected = setupWifi();
-  lastWifiConnectedTime = millis();
+    if (!client.connected() && wifiConnected) {
+      mqttConnected = reconnectMQTT();
+    }
+    lastWifiConnectedTime = millis();
   }
 
   if (WiFi.status() == WL_CONNECTED) {
+    wifiConnected = true;
     strcpy(msg_wifi, "CONNECTED");
   } else {
+    wifiConnected = false;
     strcpy(msg_wifi, "DISCONNECTED"); 
   }
 
-  if (!client.connected() && wifiConnected) {
-    mqttConnected = reconnect(msg_mqtt);
-  }
-  
   if (client.connected()) {
+    mqttConnected = true;
     strcpy(msg_mqtt, "CONNECTED");
   } else {
+    mqttConnected = false;
     strcpy(msg_mqtt, "DISCONNECTED"); 
   }
-  
+        
   client.loop();
 
   if (programMode == 1) {
     ArduinoOTA.handle();
   } else {
-        // These items take very little time to execute (~1-3 sec) but it would be good to measure them more often
+        // These items take very little time to execute (~1-3 msec) but it would be good to measure them more often
         readTime(msg_date, msg_time);
 
         if (pcf8574Configured == true) {
@@ -1133,7 +1146,7 @@ char msg_mqtt[50];
 
         readLDRSensor(ldrSensorValue, mqttConnected);
 
-        readPIRSensor(mqttConnected);
+        //readPIRSensor(mqttConnected);
       
         publishTime(msg_date, msg_time, mqttConnected);
 
